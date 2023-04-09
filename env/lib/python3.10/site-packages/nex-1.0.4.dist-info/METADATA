@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: nex
+Version: 1.0.4
+Summary: Run NeuroExplorer Python scripts and read and write .nex and .nex5 files in any Python IDE
+Home-page: https://github.com/NeuroExplorer/nex-Python-package
+Author: Alex Kirillov
+Author-email: <alex@neuroexplorer.com>
+Keywords: NeuroExplorer,nex,nex5,Python
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7.*
+Description-Content-Type: text/plain
+License-File: LICENSE
+Requires-Dist: numpy
+
+Provides a simple way to run Python scripts that control NeuroExplorer (open data file, get file data, run analysis, save results, etc.) in any Python IDE.
