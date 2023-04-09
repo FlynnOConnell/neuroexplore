@@ -3,7 +3,7 @@ from scipy import stats, signal
 import sys
 import os
 
-import nex.nexfile
+from nex import nexfile
 
 # File to analyze
 file = r'G:\PlexonData\Solid Food Data outputs\Cells recorded for both paradigms\SFN14 ' \
