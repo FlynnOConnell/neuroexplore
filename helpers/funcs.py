@@ -7,11 +7,11 @@ from __future__ import annotations
 import os
 import logging
 from pathlib import Path
-from typing import Iterable, Optional, Any
-
+from typing import Iterable, Optional, Any, Tuple
+import matplotlib
+from matplotlib import rcParams, lines
+import matplotlib.pyplot as plt
 import numpy as np
-
-from .wrappers import typecheck
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -24,7 +24,6 @@ def filter_dict(my_dict: dict, to_filter: Iterable):
     return {k: v for k, v in my_dict.items() if my_dict[k] in np.unique(to_filter)}
 
 
-@typecheck(str)
 def check_numeric(my_str: str):
     """ Return boolean True if string is all numbers, otherwise False."""
     return my_str.isdecimal()
@@ -48,7 +47,6 @@ def keys_exist(element, *keys):
     return True
 
 
-@typecheck(dict, int)
 def iter_events(event_dct, gap: int = 5):
     """
     Given an interval 'gap',
@@ -61,7 +59,6 @@ def iter_events(event_dct, gap: int = 5):
             yield event, interv
 
 
-@typecheck(Iterable)
 def flatten(lst: Iterable) -> list:
     return [item for sublist in lst for item in sublist]
 
@@ -77,7 +74,6 @@ def check_unique_path(path) -> str:
     return path
 
 
-@typecheck(Iterable, int)
 def interval(
         lst: Iterable[any], gap: Optional[int] = 1, outer: bool = False
 ) -> list[tuple[Any, Any]]:
@@ -108,7 +104,6 @@ def interval(
     return interv
 
 
-@typecheck(Iterable[any], Iterable[any])
 def get_peak_window(time: Iterable[any], peak: float) -> list:
     """
     Returns the index of tracedata centered 1s around the peak flourescent value for
@@ -128,33 +123,54 @@ def get_peak_window(time: Iterable[any], peak: float) -> list:
     return window_ind
 
 
-def get_matched_time(time: np.ndarray, match: np.ndarray) -> np.ndarray:
+def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     """
     Finds the closest number in time to the input. Can be a single value,
-    or list. Find all the absolute differences between match and time, find
+    or list. Finds all absolute differences between match and time, find
     the minima of these abs. values and the argument value of the minima. Return
     all matches.
     Args:
-        time : np.ndarray
+        time : np.ndarray | int
             Correct values to be matched to.
         match : Iterable[any]
             Values to be matched.
     Returns
          np.ndarray of matched times.
     """
+    time = np.asarray(time)
     match = np.asarray(match).reshape(-1, 1)
     mins = np.argmin(np.abs(match - time), axis=1)
     return np.array([time[mins[i]] for i in range(len(match))])
 
-def spike_frequency(spikes: np.ndarray) -> np.ndarray:
+
+def get_handles_from_dict(
+        color_dict: dict,
+        markersize: Optional[int] = 5,
+        marker: Optional[str] = 'o',
+        **kwargs
+) -> Tuple[list, list]:
     """
-    Frequency, as f = n/T
+    Get matplotlib handles for input dictionary.
     Args:
-        spikes : np.ndarray
-            Array of spike times in a constant timespan.
-
-    Returns
-         Frequency of spike train in spikes/second.
+        markersize ():
+        color_dict (dict): Dictionary of event:color k/v pairs.
+        marker (str): Shape of scatter point, default is circle.
+    Returns:
+        proxy (list): matplotlib.lines.line2D appended list.
+        label (list): legend labels for each proxy.
     """
-
-    return np.array([time[mins[i]] for i in range(len(match))])
+    proxy, label = [], []
+    for t, c in color_dict.items():
+        proxy.append(
+            lines.Line2D(
+                [0],
+                [0],
+                marker=marker,
+                markersize=markersize,
+                markerfacecolor=c,
+                markeredgecolor="None",
+                linestyle="None",
+                **kwargs
+            ))
+        label.append(t)
+    return proxy, label
