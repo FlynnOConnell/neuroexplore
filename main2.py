@@ -1,13 +1,13 @@
-
 from collections import defaultdict, OrderedDict
 import numpy as np
 import pandas as pd
 import seaborn as sb
 import matplotlib.pyplot as plt
+from matplotlib import rcParams, lines
 import os
 from nex import nexfile
 
-from helpers.funcs import get_matched_time
+from helpers import funcs, ax_helpers
 
 file = "SFN14_2018-12-07_vision_SF.nex"
 savepath = "/Users/flynnoconnell/Pictures/sf"
@@ -61,6 +61,7 @@ for var in data['Variables']:
         timestamps[var['Header']['Name']] = var['Timestamps']
 
 ts_holder = defaultdict(list)
+neuro_df = pd.DataFrame()
 for neuron in neurons:
     # intialize data containers
     neur = timestamps[neuron]
@@ -76,57 +77,72 @@ for neuron in neurons:
 
 neuro_df.Color = neuro_df.Color.fillna('black')
 
-trials = {
-    k: {} for k in eating_events
-}
-counter = 0
-x = 0
-
-for row in neuro_df.iterrows():
-    if (row[1]['Event'] in well_events) & (x in [0, 2]):
-        start = row[1]['Neuron']
-        begin = start - 2
-        x = 1
-        well_spike_count = 0
-    if (row[1]['Event'] in well_events) & (x == 1):
-        well_spike_count += 1
-        event_tracker = row[1]['Event']
-        if type(neuro_df.loc[row[0] + 1, 'Event']) == float:
-            num_well_ev = well_spike_count
-            x = 2
-    if row[1]['Event'] in eating_events:
-        if type(neuro_df.loc[row[0] + 1, 'Event']) == float:
-            end = row[1]['Neuron']
-            x = 0
-            counter += 1
-            idx = np.where((neuro_df['Neuron'] >= begin) & (neuro_df['Neuron'] <= end))[0]
-            trials[row[1]['Event']][counter] = neuro_df.loc[idx[0]:idx[-1], :]
-
-test = trials['e_BR'][4]
+trials = {k: {} for k in eating_events}
 
 # %%
 
-bins = np.arange(test.Neuron.iloc[0], test.Neuron.iloc[-1] - test.Neuron.iloc[0], binsize)
+counter = 0
+x = 0
+for row in neuro_df.iterrows():
+    ts_idx = row[0]
+    ts_stamp = row[1]['Neuron']
+    ts_event = row[1]['Event']
+
+    if (ts_event in well_events) & (x in [0, 2]):
+        start = ts_stamp
+        begin = start - 2
+        x = 1
+        well_spike_count = 0
+    if (ts_event in well_events) & (x == 1):
+        well_spike_count += 1
+        event_tracker = ts_event
+        if type(neuro_df.loc[ts_idx + 1, 'Event']) == float:
+            num_well_ev = well_spike_count
+            x = 2
+    if ts_event in eating_events:
+        if type(neuro_df.loc[row[0] + 1, 'Event']) == float:
+            end = ts_stamp
+            x = 0
+            counter += 1
+            idx = np.where((neuro_df['Neuron'] >= begin) & (neuro_df['Neuron'] <= end))[0]
+            trials[ts_event][counter] = neuro_df.loc[idx[0]:idx[-1], :]
+
+# %%
+
+rcParams.update(
+    {
+        "font.weight": "bold",
+        "font.family": "Arial",
+        'font.sans-serif': "Arial",
+        "axes.labelweight": "bold",
+        "xtick.major.width": "1.3",
+        "axes.facecolor": "w",
+        "axes.labelsize": 10,
+        "lines.linewidth": 1,
+    }
+
+)
+
+a_trial = trials['e_BR'][4]
+bins = np.arange(a_trial.Neuron.iloc[0], a_trial.Neuron.iloc[-1], binsize)
 # plt.hist(test.iloc[:, 0], histtype='step')
-y, x = np.histogram(test.Neuron, bins.reshape(-1))
-plt.bar(x[:-1], y, width=binsize)
-plt.show()
-
-# variable name positions
-# varpos = [.5 * (lengths[i] + lengths[i + 1]) for i in range(len(lengths) - 1)]
-
-# generate plot
+y_height, x_bins = np.histogram(a_trial.Neuron, bins.reshape(-1))
 fig, ax = plt.subplots()
+barcol = [funcs.get_matched_time(np.asarray(a_trial.Neuron), x)[0] for x in x_bins]
 
-# plot = sb.heatmap(test['Neuron'], cmap='jet', cbar_kws={'label': 'spikes/bin'})
-# ax.get_yaxis().set_visible(False)
-# ax.get_xaxis().set_ticks(np.arange(0, test.shape[1] + 1, 1 / binsize))
-#
-# ax.get_xaxis().set_ticklabels(np.arange(test.iloc[0, 0], test.iloc[test.shape[0]-2], 1))
-# plt.xticks(rotation=0)
-# plt.axvline(x=test.iloc[0, 0]+2 / binsize, ymin=0, ymax=1, color='red')
-# plt.xlabel('Time (s)')
-plt.tight_layout()
+a_ev = a_trial.Color.iloc[[np.where(a_trial.Neuron == x)[0][0] for x in barcol]]
+
+thisdict = {'Peanuts': 'orange',
+            'Well': 'blue',
+            'Movement': 'black'
+            }
+ax = ax_helpers.get_legend(ax, thisdict, a_ev, 1)
+
+ax.bar(x_bins[:-1], y_height, width=binsize, color=a_ev)
+ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] + 1)
+
+# ax.hlines(y=ax.get_ylim()[1], xmin=4, xmax=20, linewidth=2, color='r')
+
 plt.show()
 
 temp = []

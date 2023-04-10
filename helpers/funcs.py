@@ -142,35 +142,3 @@ def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     mins = np.argmin(np.abs(match - time), axis=1)
     return np.array([time[mins[i]] for i in range(len(match))])
 
-
-def get_handles_from_dict(
-        color_dict: dict,
-        markersize: Optional[int] = 5,
-        marker: Optional[str] = 'o',
-        **kwargs
-) -> Tuple[list, list]:
-    """
-    Get matplotlib handles for input dictionary.
-    Args:
-        markersize ():
-        color_dict (dict): Dictionary of event:color k/v pairs.
-        marker (str): Shape of scatter point, default is circle.
-    Returns:
-        proxy (list): matplotlib.lines.line2D appended list.
-        label (list): legend labels for each proxy.
-    """
-    proxy, label = [], []
-    for t, c in color_dict.items():
-        proxy.append(
-            lines.Line2D(
-                [0],
-                [0],
-                marker=marker,
-                markersize=markersize,
-                markerfacecolor=c,
-                markeredgecolor="None",
-                linestyle="None",
-                **kwargs
-            ))
-        label.append(t)
-    return proxy, label
