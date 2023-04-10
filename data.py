@@ -18,7 +18,7 @@ class EatingData:
     signals: pd.DataFrame = field(init=False)
 
     def __post_init__(self, ):
-        self.raw_eatingdata = XXXXXXXXXXXX
+        self.raw_eatingdata = eatingdata
         # Core attributes
         self.__set_adjust()
         self.__clean()
