@@ -119,7 +119,8 @@ class ReadData:
 
     def search_files(self):
         dirpath = self._directory
-        assert dirpath.is_dir()
+        if not dirpath.is_dir():
+            raise IsADirectoryError(f'{dirpath} is not a valid directory')
         file_list = []
         for x in dirpath.iterdir():
             if x.is_file():

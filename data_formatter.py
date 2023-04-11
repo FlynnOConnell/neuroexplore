@@ -1,15 +1,13 @@
 from __future__ import annotations
-
-from nex import nexfile
-
-from helpers import funcs, ax_helpers
-import logging
+from typing import Optional, Tuple
 from collections import namedtuple
+from nex import nexfile
+import logging
 from pathlib import Path
-from typing import Optional
 import numpy as np
 import pandas as pd
-
+import statistics
+from helpers import funcs, ax_helpers
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 logger.setLevel(logging.DEBUG)
@@ -26,13 +24,19 @@ class DataFormatter:
             nexdata: dict,
             well_events,
             eating_events,
-            colors
+            colors,
+            start: int = -1,
+            end: int = 6,
+            binsize: int | float = 0.1
 
     ) -> None:
         self.colors = colors
         self.raw_datadict = nexdata
         self.well_events = well_events
         self.eating_events = eating_events
+        self.end_trial = end
+        self.start_trial = start
+        self.binsize = binsize
         self.neurons = ()
         self.intervals = {}
         self.timestamps = {}
@@ -45,8 +49,7 @@ class DataFormatter:
         self.populate()
         self.sort()
         self.splice()
-        self.spont_binned = self.spont_bins()
-
+        self.spont_mean_std: list = self.spont_mean_std()
 
     def populate(self):
         for var in self.raw_datadict['Variables']:
@@ -105,17 +108,23 @@ class DataFormatter:
                         idx = np.where((neuro_df['Neuron'] >= begin) & (neuro_df['Neuron'] <= end))[0]
                         self.trials[ts_event][counter] = neuro_df.loc[idx[0]:idx[-1], :]
 
-    def spont_bins(self):
-        spont_hist = []
+    def spont_mean_std(self) -> list:
+        allhist = []
+        avg, std = [], []
         intervs = list(zip(self.spont_intervals["Spont"][0], self.spont_intervals["Spont"][1]))
         for interval in intervs:
-            start = -1
-            binsize = 0.1
             hist = np.histogram(
                 self.timestamps['SPK08a'],
                 bins=np.arange(
                     interval[0],
-                    interval[1], binsize))[0]
-            mean = zip(hist, )
-            spont_hist.append(hist)
-        return spont_hist
+                    interval[1], self.binsize))[0]
+            avg.append(statistics.mean(hist)*10)
+            std.append(statistics.stdev(hist.astype(float)))
+
+        return [statistics.mean(avg), statistics.stdev(std)]
+
+    def interval_gen(self, key: str):
+        intervs = list(zip(self.spont_intervals[key][0], self.spont_intervals[key][1]))
+        for interv in intervs:
+            yield interv
+
