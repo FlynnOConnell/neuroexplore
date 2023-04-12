@@ -1,16 +1,21 @@
+import signal
 from collections import defaultdict, OrderedDict
 import numpy as np
 import pandas as pd
 import seaborn as sb
 import matplotlib.pyplot as plt
 from matplotlib import rcParams, lines
+from scipy import signal
 import os
 from nex import nexfile
 from data_reader import ReadData
 from data_formatter import DataFormatter
 from helpers import funcs, ax_helpers
+import plot
 
-file = "SFN14_2018-12-07_vision_SF.nex"
+# %%
+
+file = "SFN16_2019-03-25_SF.nex"
 
 well_events = ['BLW_bout_Int',
                'FLW_bout_Int',
@@ -30,20 +35,58 @@ colors['Spont'] = 'gray'
 
 savepath = "/Users/flynnoconnell/Pictures/sf"
 
-data = ReadData(file, os.getcwd() + "/data/")
-formatted = DataFormatter(data.raw_data, well_events, eating_events, colors)
+_data = ReadData(file, os.getcwd() + "/data/")
+data = DataFormatter(_data.raw_data, well_events, eating_events, colors)
 
-data_trials = formatted.trials
-data_nframes = formatted.neuroframes
+data_trials = data.trials
+df = data.df_sorted
 
-tstamps = formatted.timestamps['SPK08a']
+tstamps = data.neurostamps
+data.generate_trials_strict()
+# average = [len(tstamps[np.where((interval[0] <= tstamps) & (tstamps <= interval[1]))]) / (interval[1] - interval[0]) for interval in data.interval_gen("Spont")]
+my_list = []
+x = 0
+legend_dict = {
+    "Spontaneous": "gray",
+    "Transition": "black",
+    "Well": "blue",
+    "Eating": "orange"
+}
 
-average = [len(tstamps[np.where((interval[0] <= tstamps) & (tstamps <= interval[1]))]) / (interval[1] - interval[0]) for interval in formatted.interval_gen("Spont")]
-np.mean(average)
+from scipy.ndimage import gaussian_filter
 
-# %%
+proxy, label = ax_helpers.get_handles_from_dict(legend_dict, 3, marker="s")
+for spikes, events, colors in data.generate_trials_strict():
+    x += 1
+    # fig, ax = plt.subplots()
+    # ax.bar(spikes.iloc[:-1], np.diff(spikes), width=0.1, color=colors)
+    # # ax.legend(
+    # #     handles=proxy,
+    # #     labels=label,
+    # #     facecolor=ax.get_facecolor(),
+    # #     edgecolor=None,
+    # #     fancybox=False,
+    # #     markerscale=3,
+    # #     shadow=True)
+    #
+    # ax.set_title("Interspike Interval vs Time", fontweight='bold')
+    # ax.set_xlabel('Time (s)')
+    # ax.set_ylabel("ISI", fontweight='bold')
+    # plt.tight_layout()
+    # plt.show()
+
+    histo = plot.Plot(spikes, events, colors)
+    histo.histogram()
 
 
-# %%
+# x = my_list[0]
+#
+# bins = np.arange(x.iloc[0], x.iloc[-1], 0.1)
+# y_height, _ = np.histogram(x, bins.reshape(-1))
+#
+# f, t, Sxx = signal.spectrogram(y_height)
+# isi = np.diff(x)
 
+# histo = plot.Plot(x, my_list[1], my_list[2])
+# histo.histogram()
 temp = []

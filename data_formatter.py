@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Generator
 from collections import namedtuple
 from nex import nexfile
 import logging
@@ -37,13 +37,14 @@ class DataFormatter:
         self.end_trial = end
         self.start_trial = start
         self.binsize = binsize
-        self.neurons = ()
+        self.neuron: str = ''
+        self.neurostamps = []
         self.intervals = {}
-        self.timestamps = {}
+
         self.well_intervals = {}
         self.eating_intervals = {}
         self.spont_intervals = {}
-        self.neuroframes = {}
+        self.df_sorted = {}
         self.trials = {}
         self.spont = None
         self.populate()
@@ -63,29 +64,28 @@ class DataFormatter:
                 self.intervals[var['Header']['Name']] = var['Intervals']
                 self.spont_intervals[var['Header']['Name']] = var['Intervals']
             if var['Header']['Type'] == 0:
-                self.neurons = self.neurons + tuple([var['Header']['Name']])
-                self.timestamps[var['Header']['Name']] = var['Timestamps']
+                self.neuron = [var['Header']['Name']][0]
+                self.neurostamps = var['Timestamps']
 
     def sort(self) -> None:
-        for neuron in self.neurons:
-            # intialize data containers
-            neur = self.timestamps[neuron]
-            neuro_df = pd.DataFrame(columns=['Neuron', 'Event', 'Color'])
-            neuro_df["Neuron"] = neur
-            for key in self.intervals:
-                intervs = list(zip(self.intervals[key][0], self.intervals[key][1]))
-                for interval in intervs:
-                    # hist = np.histogram(neur, bins=np.arange(interval[0] + start, interval[1], binsize))[0]
-                    idx = np.where((neuro_df['Neuron'] >= interval[0]) & (neuro_df['Neuron'] <= interval[1]))[0]
-                    neuro_df.loc[idx[0]:idx[-1], 'Event'] = key
-                    neuro_df.loc[idx[0]:idx[-1], 'Color'] = self.colors[key]
-            neuro_df.Color = neuro_df.Color.fillna('black')
-            self.neuroframes[neuron] = neuro_df
+        # intialize data containers
+        neuro_df = pd.DataFrame(columns=['Neuron', 'Event', 'Color'])
+        neuro_df["Neuron"] = self.neurostamps
+        for key in self.intervals:
+            intervs = list(zip(self.intervals[key][0], self.intervals[key][1]))
+            for interval in intervs:
+
+                # hist = np.histogram(neur, bins=np.arange(interval[0] + start, interval[1], binsize))[0]
+                idx = np.where((neuro_df['Neuron'] >= interval[0]) & (neuro_df['Neuron'] <= interval[1]))[0]
+                if len(idx) > 0:
+                    neuro_df.iloc[idx[0]:idx[-1], 1] = key
+                    neuro_df.iloc[idx[0]:idx[-1], 2] = self.colors[key]
+        neuro_df.Color = neuro_df.Color.fillna('black')
+        self.df_sorted[self.neuron] = neuro_df
 
     def splice(self):
-        for neuron, neuro_df in self.neuroframes.items():
+        for neuron, neuro_df in self.df_sorted.items():
             self.trials = {k: {} for k in self.eating_events}
-            counter = 0
             x = 0
             for row in neuro_df.iterrows():
                 ts_idx = row[0]
@@ -104,17 +104,16 @@ class DataFormatter:
                     if type(neuro_df.loc[row[0] + 1, 'Event']) == float:
                         end = ts_stamp
                         x = 0
-                        counter += 1
+                        trial_num = len(self.trials[ts_event].keys()) + 1
                         idx = np.where((neuro_df['Neuron'] >= begin) & (neuro_df['Neuron'] <= end))[0]
-                        self.trials[ts_event][counter] = neuro_df.loc[idx[0]:idx[-1], :]
+                        self.trials[ts_event][trial_num] = neuro_df.loc[idx[0]:idx[-1], :]
 
     def spont_mean_std(self) -> list:
-        allhist = []
         avg, std = [], []
         intervs = list(zip(self.spont_intervals["Spont"][0], self.spont_intervals["Spont"][1]))
         for interval in intervs:
             hist = np.histogram(
-                self.timestamps['SPK08a'],
+                self.neurostamps,
                 bins=np.arange(
                     interval[0],
                     interval[1], self.binsize))[0]
@@ -123,8 +122,20 @@ class DataFormatter:
 
         return [statistics.mean(avg), statistics.stdev(std)]
 
-    def interval_gen(self, key: str):
+    def generate_intervals(self, key: str):
+        """Returns a generator with each interval for a given key."""
         intervs = list(zip(self.spont_intervals[key][0], self.spont_intervals[key][1]))
         for interv in intervs:
             yield interv
 
+    def generate_trials_strict(self) -> Generator[Tuple[pd.Series, pd.Series, pd.Series]]:
+        """
+        Returns a generator with a dataframe for each trial, previous trial is cut-off.
+        Only nan values for pre-stim timeframe.
+        """
+        for event, trial in self.trials.items():
+            for trial_num, df in trial.items():
+                ts = df.iloc[:, 0]
+                ev = df.iloc[:, 1]
+                co = df.iloc[:, 2]
+                yield ts, ev, co
