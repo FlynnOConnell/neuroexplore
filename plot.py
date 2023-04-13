@@ -74,12 +74,22 @@ class Plot:
         plt.tight_layout()
         plt.show()
 
-    def isi_histogram(self, time, binsize: int | float = 0.1, legend_dict: dict = None) -> None:
+    def isi_histogram(self, legend_dict: dict = None) -> None:
+        fig, ax = plt.subplots()
+        ax.bar(self.spikes.iloc[:-1], np.diff(self.spikes), width=0.1, color=self.colors)
+        if legend_dict:
+            proxy, label = ax_helpers.get_handles_from_dict(legend_dict, 3, marker="s")
+            ax.legend(
+                handles=proxy,
+                labels=label,
+                facecolor=ax.get_facecolor(),
+                edgecolor=None,
+                fancybox=False,
+                markerscale=3,
+                shadow=True)
 
-        bins = np.arange(0, .5, 1e-3)  # Define the bins for the histogram
-        plt.hist(self.spikes, bins)  # Plot the histogram of the ISI data
-        plt.xlim([0, 0.15])  # ... focus on ISIs from 0 to 150 ms
-        plt.xlabel('ISI [s]')  # ... label the x-axis
-        plt.ylabel('Counts')  # ... and the y-axis
-        plt.title('Low-light')  # ... give the plot a title
+        ax.set_title("Interspike Interval vs Time", fontweight='bold')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel("ISI", fontweight='bold')
+        plt.tight_layout()
         plt.show()

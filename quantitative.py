@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy import stats, signal
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 def fdr(pvals, q, stimuli):
@@ -205,3 +207,59 @@ def get_5L_penalty(
             # increase the penalty value
             bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a
     return bootpen, eff_a
+
+def sort_by_col(arr: np.ndarray):
+    for col in range(arr.shape[1]):
+        arr[:,col] = -np.sort(-arr[:,col])
+    return arr
+
+y_new = sort_by_col(y)
+
+fig, ax = plt.subplots()
+ax.xaxis.set_ticklabels(np.arange(-2, 5, 1))
+ax.xaxis.set_ticks(np.arange(-2, 5, 1))
+sns.heatmap(y, cmap='plasma')
+
+ax.set_title("Spectrogram", fontweight='bold')
+ax.set_xlabel("Time(s)")
+ax.set_ylabel("Frequency (Hz)", fontweight='bold')
+plt.tight_layout()
+plt.show()
+
+# for spikes, events, colors in data.generate_trials_strict():
+#     x += 1
+#     histo = plot.Plot(spikes, events, colors)
+#     histo.histogram()
+
+
+temp = []
+
+frequency_range = np.round(np.linspace(0, np.amax(y), 10), 1)
+spectrogram = np.zeros(shape=(frequency_range.shape[0], np.arange(-2, 5, 0.1)[:-1].shape[0]))
+
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+rng = np.random.default_rng()
+time = np.round(np.arange(-2, 5, 0.1)[:-1], 1)
+
+vals = np.random.randint(0, 150, size=(frequency_range.shape[0], time.shape[0]))
+fix, ax = plt.subplots()
+
+
+xlab = [-2, 0, 1, 2, 3, 4, 5, 6]
+xpos = [0, 10, 20, 30, 40, 50, 60, 70]
+ypos = [10, 0]
+ylab = [0, 150]
+ax = sns.heatmap(vals, cmap='plasma', ax=ax)
+ax.xaxis.set_ticks([0, 10, 20, 30, 40, 50])
+ax.xaxis.set_ticklabels([-2, 0, 1, 2, 3, 4])
+ax.yaxis.set_ticks(ypos)
+ax.yaxis.set_ticklabels(ylab)
+ax.set_title("Frequency Matrix", fontweight='bold')
+ax.set_xlabel("Time (s)")
+ax.set_ylabel("Frequency (Hz)", fontweight='bold')
+
+plt.show()
+# average = [len(tstamps[np.where((interval[0] <= tstamps) & (tstamps <= interval[1]))]) / (interval[1] - interval[0]) for interval in data.interval_gen("Spont")]
