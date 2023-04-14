@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.ndimage import gaussian_filter
-import seaborn as sb
+import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib import rcParams, lines
 from helpers import funcs, ax_helpers
