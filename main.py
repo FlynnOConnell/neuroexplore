@@ -23,8 +23,6 @@ def fft(spike_times: np.ndarray):
     ___________
     spike_times: array
         Array of spike times
-    sampling_frequency: float
-        Sampling frequency of the spike times
     Returns:
     ________
     freqs: array
@@ -32,19 +30,18 @@ def fft(spike_times: np.ndarray):
     spike_fft: array
         Array of FFT output
     """
-    # Calculate the time intervals between spikes
+    # Normalize the spike times by subtracting the first spike time
+    spike_times = np.asarray(spike_times)
+    spike_times = spike_times - spike_times[0]
+    # spike_times = spike_times[:100]
     time_intervals = np.diff(spike_times)
+    N = len(spike_times)
+    sampling_frequency = 1000
+    nyquist_frequency = int(sampling_frequency / 2)
 
-    # Calculate the sampling frequency from the median time interval
-    sampling_frequency = 1 / np.median(time_intervals)
-
-    # Calculate the Nyquist frequency
-    nyquist_frequency = sampling_frequency / 2
-
-    # Calculate the maximum frequency in the FFT output
+    Hz = np.linspace(0, int(nyquist_frequency), int(np.floor(N / 2) + 1))
     max_frequency = 1 / (2 * np.median(time_intervals))
 
-    # Check if the maximum frequency is greater than the Nyquist frequency
     if max_frequency > nyquist_frequency:
         print("Warning: time intervals are too small compared to sampling frequency for FFT")
         return None, None
@@ -58,29 +55,26 @@ def fft(spike_times: np.ndarray):
 
     # Calculate the FFT of the padded spike times array
     spike_fft = np.fft.fft(spike_times_padded)
+    freqs = np.fft.fftfreq(len(spike_times_padded), d=1 / sampling_frequency)
 
-    # Calculate the frequency values for the FFT output
-    freqs = np.fft.fftfreq(len(spike_times_padded)) * sampling_frequency
+    plt.plot(freqs, np.abs(spike_fft))
+    plt.ylabel('Amplitude')
+    plt.xlabel('Freq - Hz')
+    plt.show()
+
     return freqs, spike_fft
 
-
-
-# Pad the spike times array with zeros to the nearest power of two
-n = int(2 ** np.ceil(np.log2(len(spike_times))))
-spike_times_padded = np.zeros(n)
-spike_times_padded[:len(spike_times)] = spike_times
-
-# Calculate the FFT of the padded spike times array
-spike_fft = np.fft.fft(spike_times_padded)
-
-# Calculate the frequency values for the FFT output
-freqs = np.fft.fftfreq(len(spike_times_padded)) * sampling_frequency
-
-# Plot the FFT output
+freqs, spike_fft = fft(data_trials['e_BR'][1].neuron)
 plt.plot(freqs, np.abs(spike_fft))
-plt.xlabel('Frequency (Hz)')
-plt.ylabel('Magnitude')
+plt.ylabel('Amplitude')
+plt.xlabel('Freq - Hz')
 plt.show()
+
+# # Plot the FFT output
+# plt.plot(freqs, np.abs(spike_fft))
+# plt.xlabel('Frequency (Hz)')
+# plt.ylabel('Magnitude')
+# plt.show()
 
 
 

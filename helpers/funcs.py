@@ -142,3 +142,11 @@ def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     mins = np.argmin(np.abs(match - time), axis=1)
     return np.array([time[mins[i]] for i in range(len(match))])
 
+def vec_to_sq(vec: np.ndarray):
+    vec = vec.astype('float')
+    sq = int(np.ceil(np.sqrt(vec.size)))
+    to_pad = (sq * sq) - vec.size
+    if to_pad % 2:
+        return np.pad(vec, (to_pad/2, to_pad/2), mode='constant', constant_values=np.nan).reshape((sq, sq))
+    else:
+        return np.pad(vec, (to_pad-1, 1), mode='constant', constant_values=np.nan).reshape((sq, sq))
