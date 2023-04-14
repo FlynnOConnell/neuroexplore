@@ -1,4 +1,6 @@
 from __future__ import annotations
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 from typing import Optional, Tuple, Generator, List
 from collections import namedtuple
 from nex import nexfile
@@ -34,12 +36,12 @@ class DataFormatter:
         self.params = {
             "start": start,
             "end": end,
-            "binsize": binsize
+            "binsize": binsize,
+            "well_events": well_events,
+            "eating_events": eating_events,
             }
         self.colors = colors
-        self.__raw_datadict = nexdata
-        self.__well_events = well_events
-        self.__eating_events = eating_events
+        self.raw = nexdata
 
         self.neuron: str = ''
         self.neurostamps = []
@@ -60,11 +62,11 @@ class DataFormatter:
         self.spont_mean_std: list = self.spont_mean_std()
 
     def populate(self):
-        for var in self.__raw_datadict['Variables']:
-            if var['Header']['Type'] == 2 and var['Header']['Name'] in self.__well_events:
+        for var in self.raw['Variables']:
+            if var['Header']['Type'] == 2 and var['Header']['Name'] in self.params['well_events']:
                 self.__intervals[var['Header']['Name']] = var['Intervals']
                 self.__well_intervals[var['Header']['Name']] = var['Intervals']
-            if var['Header']['Type'] == 2 and var['Header']['Name'] in self.__eating_events:
+            if var['Header']['Type'] == 2 and var['Header']['Name'] in self.params['eating_events']:
                 self.__intervals[var['Header']['Name']] = var['Intervals']
                 self.__eating_intervals[var['Header']['Name']] = var['Intervals']
             if var['Header']['Type'] == 2 and var['Header']['Name'] in ['Spont', 'spont']:
@@ -98,9 +100,9 @@ class DataFormatter:
         new_arr = []
         arr = np.asarray(ev_arr)
         for i, ev in enumerate(arr):
-            if ev in self.__well_events:
+            if ev in self.params['well_events']:
                 new_arr.append(int(1))
-            elif ev in self.__eating_events:
+            elif ev in self.params['eating_events']:
                 new_arr.append(int(2))
             elif ev in ["spont"]:
                 new_arr.append(int(3))
@@ -110,22 +112,22 @@ class DataFormatter:
 
 
     def splice(self):
-        self.trials = {k: {} for k in self.__eating_events}
+        self.trials = {k: {} for k in self.params['eating_events']}
         x = 0
         for row in self.df_sorted.iterrows():
             ts_idx = row[0]
             ts_stamp = row[1]['neuron']
             ts_event = row[1]['event']
 
-            if (ts_event in self.__well_events) & (x in [0, 2]):
+            if (ts_event in self.params['well_events']) & (x in [0, 2]):
                 start = ts_stamp
                 begin = start - 2
                 x = 1
 
-            if (ts_event in self.__well_events) & (x == 1):
+            if (ts_event in self.params['well_events']) & (x == 1):
                 if type(self.df_sorted.loc[ts_idx + 1, 'event']) == float:
                     x = 2
-            if ts_event in self.__eating_events:
+            if ts_event in self.params['eating_events']:
                 if type(self.df_sorted.loc[row[0] + 1, 'event']) == float:
                     end = ts_stamp
                     x = 0
@@ -165,19 +167,23 @@ class DataFormatter:
                 co = df.iloc[:, 2]
                 yield ts, ev, co
 
-    def generate_spectrogram_data(self):
-        for ev in self.trials.keys():
-            x_bin =  np.arange(-2, 5, 0.1)
-            if self.trials[ev]:
-                spect = np.zeros(shape=(len(self.trials[ev]), len(x_bin)-1))
-                for trial, this_trial_df in self.trials[ev].items():
-                    trial_length = (this_trial_df["neuron"].iloc[-1] - this_trial_df["neuron"].iloc[0])
-                #     bins = pd.cut(this_trial_df.iloc[:,0], int(np.round(trial_length)*10))
-                #     counts = this_trial_df.groupby(['bins'])['color'].transform('count')
-                #     this_trial_df.loc[:, "bins"] = bins
-                #     self.trials[ev][trial] = this_trial_df
-                #     # self.trials[ev][trial].loc[:,"Bin"] = pd.cut(this_trial_df.iloc[:,0], int(np.round(trial_length)*10))
-                #     hist, bins = np.histogram(trial_spikes, x_bin)
-                #     spect[trial-1,:] = hist*10
-                #
-                # yield spect, this_trial_df.iloc[:,3], trial_length
+
+    def generate_trials_loose(self) -> Generator[Tuple[pd.Series, pd.Series, pd.Series]]:
+        """
+        Returns a generator with a dataframe for each trial with 2s+ of cushion pre-stimulus.
+        Only nan values for pre-stim timeframe.
+        returns: generator[df]
+
+        """
+        for event, trial in self.trials.items():
+            for trial_num, df in trial.items():
+                x = 0
+                df_idx = np.where(df.event.isin(self.params['well_events']))[0]
+                first_well_time = df.neuron.iloc[df_idx[0]]
+                pre_well = df.loc[df.neuron < first_well_time, 'event']
+                if pre_well.isin(self.params['eating_events']).any():
+                    x = 1
+                if pre_well.isin(self.params['eating_events']).any():
+                    x = 1
+                if x != 1:
+                    yield df
