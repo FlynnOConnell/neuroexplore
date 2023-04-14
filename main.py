@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
@@ -6,6 +7,51 @@ import os
 from data_reader import ReadData
 from data_formatter import DataFormatter
 from params import Params
+from fourier import fft, stfft
+
+def discrete_mean(arr):
+    """Calculate the mean along the axis of a discrete array."""
+    arr = np.asarray(arr)
+    cumsum = np.cumsum(arr)
+    cumsum[2:] = cumsum[2:] - cumsum[:-2]
+    return np.asarray(cumsum[2 - 1:] / 2, dtype=int)
+
+def rolling_average_with_std(arr, window_size=10):
+    """
+    Calculate the rolling average and standard deviation of an array. We use
+    ddof=0 to ensure it's calculated as the population standard deviation.
+
+    Parameters
+    ----------
+    :param arr: array to calculate rolling average and standard deviation of
+    :param window_size: size of the window to calculate the rolling average and standard deviation
+
+    Returns
+    -------
+    :return rolling_avg: array of rolling averages
+    :return rolling_std: array of rolling standard deviations
+    """
+    rolling_avg_per_point = []
+    rolling_std_per_point = []
+
+    # Pad the input array with zeros to ensure it's divisible by window_size
+    arr_padded = np.concatenate((arr, np.zeros(window_size - len(arr) % window_size)))
+
+    # Calculate rolling average for the window
+    for i in range(0, len(arr_padded), window_size):
+        window = arr_padded[i:i + window_size]
+        avg = np.mean(window)  # Calculate average for the window
+        rolling_avg_per_point.extend([avg] * len(window))  # Extend the list with the window's average
+
+    # Iterate over each value within the window and calculate standard deviation for that individual value
+    for i in range(len(arr)):
+        window_start = max(0, i - window_size + 1)
+        window_end = min(i + 1, len(arr))
+        window = arr[window_start:window_end]
+        std = np.std(window, ddof=0)  # Calculate standard deviation for the window
+        rolling_std_per_point.append(std)  # Append the standard deviation to the list
+
+    return rolling_avg_per_point, rolling_std_per_point
 
 # %%
 params = Params()
@@ -14,70 +60,27 @@ nexdata = ReadData(params.filename, os.getcwd() + params.directory)
 data = DataFormatter(nexdata.raw_data, params.well_events, params.eating_events, params.colors)
 data_trials = data.trials
 
-# %%
+x=0
+df_o = pd.DataFrame()
+df1 = pd.DataFrame(columns=['isi', 'mid'])
+for df in data.generate_trials_loose():
+    x += 1
+    if x == 1:
+        df_o = df
+        isi = np.diff(df.neuron)
+        store = np.asarray(df['mid'].values[:-1], dtype=float)
+        df1['mid'] = (store + store) / 2
+        df1['isi'] = isi
 
-def fft(spike_times: np.ndarray):
-    """
-    Calculate the FFT of spike times
-    Parameters:
-    ___________
-    spike_times: array
-        Array of spike times
-    Returns:
-    ________
-    freqs: array
-        Array of frequencies
-    spike_fft: array
-        Array of FFT output
-    """
-    # Normalize the spike times by subtracting the first spike time
-    spike_times = np.asarray(spike_times)
-    spike_times = spike_times - spike_times[0]
-    # spike_times = spike_times[:100]
-    time_intervals = np.diff(spike_times)
-    N = len(spike_times)
-    sampling_frequency = 1000
-    nyquist_frequency = int(sampling_frequency / 2)
+avg, std = rolling_average_with_std(df1.isi)
+df1['std'] = std
+counts, bins = np.histogram(df1.isi, bins=np.arange(0, 0.2, 0.001))
 
-    Hz = np.linspace(0, int(nyquist_frequency), int(np.floor(N / 2) + 1))
-    max_frequency = 1 / (2 * np.median(time_intervals))
-
-    if max_frequency > nyquist_frequency:
-        print("Warning: time intervals are too small compared to sampling frequency for FFT")
-        return None, None
-    else:
-        print("Time intervals are suitable for FFT")
-
-    # Pad the spike times array with zeros to the nearest power of two
-    n = int(2 ** np.ceil(np.log2(len(spike_times))))
-    spike_times_padded = np.zeros(n)
-    spike_times_padded[:len(spike_times)] = spike_times
-
-    # Calculate the FFT of the padded spike times array
-    spike_fft = np.fft.fft(spike_times_padded)
-    freqs = np.fft.fftfreq(len(spike_times_padded), d=1 / sampling_frequency)
-
-    plt.plot(freqs, np.abs(spike_fft))
-    plt.ylabel('Amplitude')
-    plt.xlabel('Freq - Hz')
-    plt.show()
-
-    return freqs, spike_fft
-
-freqs, spike_fft = fft(data_trials['e_BR'][1].neuron)
-plt.plot(freqs, np.abs(spike_fft))
-plt.ylabel('Amplitude')
-plt.xlabel('Freq - Hz')
+fig, ax = plt.subplots()
+ax.plot(df1.mid, df1.isi, color='black')
 plt.show()
 
-# # Plot the FFT output
-# plt.plot(freqs, np.abs(spike_fft))
-# plt.xlabel('Frequency (Hz)')
-# plt.ylabel('Magnitude')
-# plt.show()
-
-
-
+# discrete_mean(x_d)
 # df1 = data.df_sorted
 # df_e = df1[df1['event'].isin(eating_events)]
 # df_s = df1[df1['event'].isin(['Spont', 'spont'])]
