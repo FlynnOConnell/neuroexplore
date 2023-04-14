@@ -60,5 +60,11 @@ out/
 # https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
 .idea/**/azureSettings.xml
 
-# End of https://www.toptal.com/developers/gitignore/api/intellij
+data/*
+!data/SFN16_2019-03-25_SF.nex
+.DS_Store
+__pycache__/*
+.idea/*
+.git/*
+.asv
 
