@@ -1,93 +1,80 @@
-import numpy as np
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter
-import os
-from data_reader import ReadData
-from data_formatter import DataFormatter
-from params import Params
-from fourier import fft, stfft
-
-def discrete_mean(arr):
-    """Calculate the mean along the axis of a discrete array."""
-    arr = np.asarray(arr)
-    cumsum = np.cumsum(arr)
-    cumsum[2:] = cumsum[2:] - cumsum[:-2]
-    return np.asarray(cumsum[2 - 1:] / 2, dtype=int)
-
-def rolling_average_with_std(arr, window_size=10):
-    """
-    Calculate the rolling average and standard deviation of an array. We use
-    ddof=0 to ensure it's calculated as the population standard deviation.
-
-    Parameters
-    ----------
-    :param arr: array to calculate rolling average and standard deviation of
-    :param window_size: size of the window to calculate the rolling average and standard deviation
-
-    Returns
-    -------
-    :return rolling_avg: array of rolling averages
-    :return rolling_std: array of rolling standard deviations
-    """
-    rolling_avg_per_point = []
-    rolling_std_per_point = []
-
-    # Pad the input array with zeros to ensure it's divisible by window_size
-    arr_padded = np.concatenate((arr, np.zeros(window_size - len(arr) % window_size)))
-
-    # Calculate rolling average for the window
-    for i in range(0, len(arr_padded), window_size):
-        window = arr_padded[i:i + window_size]
-        avg = np.mean(window)  # Calculate average for the window
-        rolling_avg_per_point.extend([avg] * len(window))  # Extend the list with the window's average
-
-    # Iterate over each value within the window and calculate standard deviation for that individual value
-    for i in range(len(arr)):
-        window_start = max(0, i - window_size + 1)
-        window_end = min(i + 1, len(arr))
-        window = arr[window_start:window_end]
-        std = np.std(window, ddof=0)  # Calculate standard deviation for the window
-        rolling_std_per_point.append(std)  # Append the standard deviation to the list
-
-    return rolling_avg_per_point, rolling_std_per_point
+import data_holder as data
 
 # %%
-params = Params()
 
-nexdata = ReadData(params.filename, os.getcwd() + params.directory)
-data = DataFormatter(nexdata.raw_data, params.well_events, params.eating_events, params.colors)
-data_trials = data.trials
+data = data.Data()
 
-x=0
-df_o = pd.DataFrame()
-df1 = pd.DataFrame(columns=['isi', 'mid'])
-for df in data.generate_trials_loose():
-    x += 1
-    if x == 1:
-        df_o = df
-        isi = np.diff(df.neuron)
-        store = np.asarray(df['mid'].values[:-1], dtype=float)
-        df1['mid'] = (store + store) / 2
-        df1['isi'] = isi
 
-avg, std = rolling_average_with_std(df1.isi)
-df1['std'] = std
-counts, bins = np.histogram(df1.isi, bins=np.arange(0, 0.2, 0.001))
-
-fig, ax = plt.subplots()
-ax.plot(df1.mid, df1.isi, color='black')
-plt.show()
-
-# discrete_mean(x_d)
-# df1 = data.df_sorted
-# df_e = df1[df1['event'].isin(eating_events)]
-# df_s = df1[df1['event'].isin(['Spont', 'spont'])]
-# df_w = df1[(df1.index <= df_e.index[0]) & (df1['event'].isin(well_events))]
+# x=0
+# well_times, eating_times, spont_times = [], [], []
+# df1 = pd.DataFrame(columns=['isi', 'mid'])
+# for df, wt, et, st in data.generate_trials_loose():
 #
-# uni = data.df_sorted.loc[data.df_sorted.mid.drop_duplicates().index, ['neuron', 'color', 'counts', 'mid']]
-#
+#     plot.isi_histogram(df.neuron, df.color)
+#     plot.trial_histogram(df)
+#     avg, std = calculate_window_stats(np.diff(df.neuron))
+#     fig, ax = plt.subplots()
+#     ax.plot(df.reset_index(drop=True).index[:-1], std, color='black')
+#     ax.set_title("St. Dev. of Sequential ISIs \n"
+#                  "(sliding window of 10 intervals)", fontweight='bold')
+#     ax.set_xlabel("ISI number", fontweight='bold')
+#     ax.set_ylabel("st. dev. (# of spikes)", fontweight='bold')
+#     ax.set_frame_on(False)
+#     ax.axvspan(
+#         et[0],
+#         et[-1],
+#         alpha=0.05,
+#         color='red'
+#     )
+#     ax.axvspan(
+#         wt[0],
+#         wt[-1],
+#         alpha=0.05,
+#         color='blue'
+#     )
+#     if st.size > 0:
+#         ax.axvspan(
+#             st[0],
+#             st[-1],
+#             alpha=0.05,
+#             color='gray'
+#         )
+#     plt.tight_layout()
+#     plt.show()
+
+
+
+
+# fw_line = np.where(df_o.neuron == well_times)[0][0]
+# lw_line = np.where(df_o.neuron == last_well_time)[0][0]
+# w_line = np.where((df_o.neuron >= well_times[0]) & (df_o.neuron <= well_times[-1]))[0]
+# e_line = np.where(df_o.neuron == last_well_time)[0][0]
+
+# fig, ax = plt.subplots()
+# ax.plot(df1.index, std, color='black')
+# ax.set_title("St. Dev. of Sequential ISIs \n"
+#              "(sliding window of 10 intervals)", fontweight='bold')
+# ax.set_xlabel("ISI number", fontweight='bold')
+# ax.set_ylabel("st. dev. (# of spikes)", fontweight='bold')
+# ax.set_frame_on(False)
+# # ax.axvspan(
+# #     np.where(df_o.neuron == well_times[0])[0][0],
+# #     np.where(df_o.neuron == last_well_time)[0][0],
+# #     alpha=0.05,
+# #     color='blue'
+# # )
+# ax.axvspan(
+#     np.where(df_o.neuron == first_eating_time)[0][0],
+#     df_o.neuron.reset_index(drop=True).index[-1],
+#     alpha=0.05,
+#     color='red'
+# )
+
+# plt.tight_layout()
+# plt.show()
+
+
 # isi = np.diff(df_e.neuron)
 # bins = np.arange(-.005, 0.2, 0.001)
 # counts, _ = np.histogram(isi, bins)

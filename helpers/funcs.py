@@ -150,3 +150,76 @@ def vec_to_sq(vec: np.ndarray):
         return np.pad(vec, (to_pad/2, to_pad/2), mode='constant', constant_values=np.nan).reshape((sq, sq))
     else:
         return np.pad(vec, (to_pad-1, 1), mode='constant', constant_values=np.nan).reshape((sq, sq))
+
+
+def discrete_mean(arr):
+    """Calculate the mean along the axis of a discrete array."""
+    arr = np.asarray(arr)
+    cumsum = np.cumsum(arr)
+    cumsum[2:] = cumsum[2:] - cumsum[:-2]
+    return np.asarray(cumsum[2 - 1:] / 2, dtype=int)
+
+
+def rolling_average_std(array, window_size=10):
+    """
+    Calculates the rolling average and standard deviation of an input numpy array
+    with a window size of 10, where each interval overlaps the previous interval by
+    all but 1 array point.
+
+    Args:
+    array (numpy array): Input array for which rolling average and standard deviation
+                         need to be calculated.
+    window_size (int): Size of the window for calculating rolling average and standard
+
+    Returns:
+    tuple: A tuple containing two numpy arrays: rolling averages and rolling standard
+           deviations.
+    """
+    num_points = len(array)
+    # Extend the array to ensure the last interval has at least 10 values
+    if num_points % window_size != 0:
+        num_extend = window_size - (num_points % window_size) + 1
+        array = np.pad(array, (0, num_extend), mode='edge')
+
+    # Calculate rolling averages and rolling standard deviations
+    rolling_averages, rolling_std = [], []
+    for i in range(0, num_points, window_size - 1):
+        interval = array[i:i + window_size]
+        average = np.mean(interval)
+        std = np.std(interval)
+        rolling_averages.append(average)
+        rolling_std.append(std)
+
+    return np.array(rolling_averages), np.array(rolling_std)
+
+
+def calculate_window_stats(arr):
+    """
+    Calculate rolling window statistics (average and standard deviation) for a given NumPy array.
+
+    Args:
+    - arr (np.ndarray): Input array
+
+    Returns:
+    - avg (np.ndarray): Array of window averages
+    - std (np.ndarray): Array of window standard deviations
+    """
+    window_size = 10
+    arr_len = len(arr)
+    avg = np.empty(arr_len)
+    std = np.empty(arr_len)
+    for i in range(arr_len):
+        if i + window_size <= arr_len:
+            window = arr[i:i + window_size]
+        else:
+            window = arr[i:]
+        if len(window) >= 2:
+            avg[i] = np.mean(window)
+            if len(window) >= 3:
+                std[i] = np.std(window)
+            else:
+                std[i] = np.nan
+        else:
+            avg[i] = np.nan
+            std[i] = np.nan
+    return avg, std

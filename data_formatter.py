@@ -18,9 +18,61 @@ logger.setLevel(logging.DEBUG)
 
 class DataFormatter:
     """
-    File handler. From directory, return genorator looping through files.
+    DataFormatter. Data manipulation and handling.
+
     Parameters:
-    ___________
+    -----------
+    nexdata : dict
+        Dictionary containing the raw data in NEX format.
+    well_events : list
+        List of well event names.
+    eating_events : list
+        List of eating event names.
+    colors : dict
+        Dictionary mapping event names to colors.
+    start : int, optional, default: -1
+        Start time for data formatting in seconds. Defaults to -1.
+    end : int, optional, default: 6
+        End time for data formatting in seconds. Defaults to 6.
+    binsize : int or float, optional, default: 0.1
+        Binsize for data formatting in seconds. Defaults to 0.1.
+
+    Attributes:
+    -----------
+    params : dict
+        Dictionary containing the parameters used for data formatting.
+    colors : dict
+        Dictionary mapping event names to colors.
+    raw : dict
+        Dictionary containing the raw data in NEX format.
+    neuron : str
+        Name of the neuron.
+    neurostamps : list
+        List of timestamps for the neuron.
+    session_length : float
+        Length of the session in seconds.
+    df_binned : pd.DataFrame
+        DataFrame containing binned data.
+    pt : pd.DataFrame
+        DataFrame containing pivot table data.
+    df_sorted : pd.DataFrame
+        DataFrame containing sorted data.
+    trials : dict
+        Dictionary containing each [-2s, well, eating] trial.
+
+    Methods:
+    --------
+    binned_spont_mean_std()
+        Calculates the mean and standard deviation of spontaneous events.
+    plot_traces(neuron, start, end, ax)
+        Plots the traces for a given neuron.
+    plot_trial(trial_num, event_type, ax)
+        Plots a trial for a given trial number and event type.
+    plot_histogram(event_type, bins, ax)
+        Plots a histogram for a given event type and bins.
+    plot_psth(event_type, bins, ax)
+        Plots a peri-stimulus time histogram (PSTH) for a given event type and bins.
+
     """
     def __init__(
             self,
@@ -56,12 +108,12 @@ class DataFormatter:
         self.df_sorted = pd.DataFrame()
         self.ev_nums = pd.Series(dtype=float)
         self.trials = {}
-        self.populate()
-        self.sort()
-        self.splice()
+        self.__populate()
+        self.__sort()
+        self.__splice()
         self.spont_mean_std: list = self.spont_mean_std()
 
-    def populate(self):
+    def __populate(self):
         for var in self.raw['Variables']:
             if var['Header']['Type'] == 2 and var['Header']['Name'] in self.params['well_events']:
                 self.__intervals[var['Header']['Name']] = var['Intervals']
@@ -77,7 +129,7 @@ class DataFormatter:
                 self.neurostamps = var['Timestamps']
                 self.session_length = np.round(self.neurostamps[-1] - self.neurostamps[1], 3)
 
-    def sort(self) -> None:
+    def __sort(self) -> None:
         # intialize data containers
         neuro_df = pd.DataFrame(columns=['neuron', 'event', 'color', 'bins', 'counts', 'mid'])
         neuro_df['neuron'] = self.neurostamps
@@ -93,10 +145,10 @@ class DataFormatter:
                     neuro_df.iloc[idx[0]:idx[-1], 1] = key
                     neuro_df.iloc[idx[0]:idx[-1], 2] = self.colors[key]
         neuro_df.color = neuro_df.color.fillna('black')
-        self.ev_nums = self.number_events(neuro_df['event'])
+        self.ev_nums = self.__number_events(neuro_df['event'])
         self.df_sorted = neuro_df
 
-    def number_events(self, ev_arr) -> list[int]:
+    def __number_events(self, ev_arr) -> list[int]:
         new_arr = []
         arr = np.asarray(ev_arr)
         for i, ev in enumerate(arr):
@@ -111,7 +163,7 @@ class DataFormatter:
         return new_arr
 
 
-    def splice(self):
+    def __splice(self):
         self.trials = {k: {} for k in self.params['eating_events']}
         x = 0
         for row in self.df_sorted.iterrows():
@@ -150,15 +202,39 @@ class DataFormatter:
         return [statistics.mean(avg), statistics.stdev(std)]
 
     def generate_intervals(self, key: str):
-        """Returns a generator with each interval for a given key."""
+        """
+        Generate intervals for a given key.
+
+        Returns a generator that yields each interval for the given key.
+
+        Args:
+            key (str): The key for which intervals are to be generated.
+
+        Yields:
+            Tuple[float, float]: A tuple containing two float values representing the start and end points of each interval.
+
+        Example:
+            >>> for interv in generate_intervals('key'):
+            ...     # Do something with interv
+        """
         intervs = list(zip(self.__spont_intervals[key][0], self.__spont_intervals[key][1]))
         for interv in intervs:
             yield interv
 
     def generate_trials_strict(self) -> Generator[Tuple[pd.Series, pd.Series, pd.Series]]:
         """
-        Returns a generator with a dataframe for each trial, previous trial is cut-off.
-        Only nan values for pre-stim timeframe.
+        Generate trials with strict criteria.
+
+        Returns a generator that yields three pandas Series objects for each trial, where the previous trial is
+        cut-off and only NaN values are present for the pre-stimulus timeframe.
+
+        Yields:
+        Tuple[pd.Series, pd.Series, pd.Series]: A tuple containing three pandas Series objects representing the
+        generated trials.
+
+        Example:
+            >>> for ts, ev, co in generate_trials_strict():
+            ...     # Do something with ts, ev, co
         """
         for event, trial in self.trials.items():
             for trial_num, df in trial.items():
@@ -167,23 +243,25 @@ class DataFormatter:
                 co = df.iloc[:, 2]
                 yield ts, ev, co
 
-
     def generate_trials_loose(self) -> Generator[Tuple[pd.Series, pd.Series, pd.Series]]:
         """
-        Returns a generator with a dataframe for each trial with 2s+ of cushion pre-stimulus.
-        Only nan values for pre-stim timeframe.
-        returns: generator[df]
-
         """
         for event, trial in self.trials.items():
             for trial_num, df in trial.items():
                 x = 0
-                df_idx = np.where(df.event.isin(self.params['well_events']))[0]
-                first_well_time = df.neuron.iloc[df_idx[0]]
-                pre_well = df.loc[df.neuron < first_well_time, 'event']
+                w_idx = np.where(df.event.isin(self.params['well_events']))[0]
+                e_idx = np.where(df.event.isin(self.params['eating_events']))[0]
+                s_idx = np.where(df.event.isin(['spont', 'Spont']))[0]
+                # if s_idx.size > 0:
+                #     spont_idx = df.neuron.iloc[s_idx[0]]
+                # first_eating_time = df.neuron.iloc[e_idx[0]]
+                well_times = df.neuron.iloc[w_idx]
+                eating_times = df.neuron.iloc[e_idx]
+                # last_well_time = df.neuron.iloc[w_idx[-1]]
+                pre_well = df.loc[df.neuron < well_times.iloc[0], 'event']
                 if pre_well.isin(self.params['eating_events']).any():
                     x = 1
                 if pre_well.isin(self.params['eating_events']).any():
                     x = 1
                 if x != 1:
-                    yield df
+                    yield df, w_idx, e_idx, s_idx

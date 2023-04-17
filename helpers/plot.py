@@ -47,7 +47,7 @@ def freq_histogram(spikes, binsize: int | float = 0.1, legend_dict: dict = None)
     plt.tight_layout()
     plt.show()
 
-def isi_histogram(spikes, events, colors, legend_dict: dict = None) -> None:
+def isi_histogram(spikes, colors, legend_dict: dict = None) -> None:
     fig, ax = plt.subplots()
     ax.bar(spikes.iloc[:-1], np.diff(spikes), width=0.1, color=colors)
     if legend_dict:
