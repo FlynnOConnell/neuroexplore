@@ -1,8 +1,8 @@
 import scipy.io
-import numpy as np
 import string
 import matlab.engine
-import data_holder as data
+from data_utils import data_holder as data
+
 try:
     eng = matlab.engine.connect_matlab(matlab.engine.find_matlab()[0])
 except IndexError:
@@ -31,15 +31,4 @@ for key, value in e_BR_dict.items():
 scipy.io.savemat(savepath + 'e_BR.mat', {'e_BR': mat_struct})
 
 
-# final = {}
-#
-# for k, v in spike_times_dict.items(): # k = e_BR, v = {3: array, 4: array}
-#     for outer, inner in v.items(): # outer = 3, inner = array
-#         for k2, v2 in inner.items():
-#
-#         mat_structs.__setattr__(outer, inner)
-#     final[k] = mat_structs
-#
-
-# scipy.io.savemat(savepath + 'from_python.mat', final)
 
