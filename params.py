@@ -3,7 +3,7 @@ class Params:
         def __init__(self):
             """Initialize parameters"""
             self.filename = 'SFN16_2019-03-25_SF.nex'
-            self.directory = 'C:\\repos\\neuroexplore\\data\\'
+            self.directory = r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\sf'
 
             self.well_events = ['BLW_bout_Int',
                'FLW_bout_Int',
