@@ -24,9 +24,5 @@ if __name__ == "__main__":
     # mydf = out.file_outer
     # mydf.to_excel(r'C:\Users\Flynn\OneDrive\Desktop\temp\output.xlsx', index=False)
     # out.output(r'C:\Users\Flynn\OneDrive\Desktop\temp\output.xlsx')
-
-
-
     # Save the output DataFrame to an Excel file
-
     # output_df.T.to_excel(outpath, index=False)

@@ -73,7 +73,6 @@ def check_unique_path(path) -> str:
         counter += 1
     return path
 
-
 def interval(
         lst: Iterable[any], gap: Optional[int] = 1, outer: bool = False
 ) -> list[tuple[Any, Any]]:
@@ -103,7 +102,6 @@ def interval(
             tmp = [v]
     return interv
 
-
 def get_peak_window(time: Iterable[any], peak: float) -> list:
     """
     Returns the index of tracedata centered 1s around the peak flourescent value for
@@ -121,7 +119,6 @@ def get_peak_window(time: Iterable[any], peak: float) -> list:
     window_ind.append(aux.index(min(aux)) - 20)
     window_ind.append(aux.index(min(aux)) + 20)
     return window_ind
-
 
 def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     """
@@ -151,14 +148,12 @@ def vec_to_sq(vec: np.ndarray):
     else:
         return np.pad(vec, (to_pad-1, 1), mode='constant', constant_values=np.nan).reshape((sq, sq))
 
-
 def discrete_mean(arr):
     """Calculate the mean along the axis of a discrete array."""
     arr = np.asarray(arr)
     cumsum = np.cumsum(arr)
     cumsum[2:] = cumsum[2:] - cumsum[:-2]
     return np.asarray(cumsum[2 - 1:] / 2, dtype=int)
-
 
 def rolling_average_std(array, window_size=10):
     """
@@ -191,7 +186,6 @@ def rolling_average_std(array, window_size=10):
         rolling_std.append(std)
 
     return np.array(rolling_averages), np.array(rolling_std)
-
 
 def calculate_window_stats(arr):
     """
