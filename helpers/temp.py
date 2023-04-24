@@ -83,3 +83,114 @@
 #
 
 # scipy.io.savemat(savepath + 'from_python.mat', final)
+
+
+from __future__ import annotations
+import warnings
+from collections import namedtuple
+import numpy as np
+import scipy.stats as stats
+import pandas as pd
+from params import Params
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+class EatingSignals:
+    def __init__(self, nexdata: dict) -> None:
+        self.nex = nexdata
+        self.ensemble = False
+        self.params = Params()
+        self.neurons: dict = {}
+        self.neurostamps = []
+        self.intervals = {}
+        self.__populate()
+        self.intervals_df = self.build_intervals_df()
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.nex["Header"]["Filename"]})'
+
+    def build_intervals_df(self):
+        for neuron, timestamps in self.neurons.items():
+            neur = pd.DataFrame()
+            intervals_df = self.get_intervals_df()
+            intervals_df['relative_timestamps'] = intervals_df.apply(
+                self.get_relative_timestamps, axis=1, neuron_df=self.__neuron_df)
+            intervals_df['binned_spike_rates'] = intervals_df['relative_timestamps'].apply(
+                self.bin_spikes, bin_size=self.params.binsize)
+            intervals_df['num_spikes'] = intervals_df['relative_timestamps'].apply(len)
+            intervals_df['duration'] = intervals_df['end_time'] - intervals_df['start_time']
+            intervals_df = intervals_df[intervals_df['duration'] >= 1]
+            intervals_df['mean_spike_rate'] = intervals_df['binned_spike_rates'].apply(np.mean)
+            intervals_df['sem_spike_rate'] = intervals_df['binned_spike_rates'].apply(stats.sem)
+        return intervals_df
+
+    @property
+    def final_stats(self):
+        file_stats = self.intervals_df.groupby('event')['mean_spike_rate'].agg(['mean', 'sem']).reset_index()
+        file_stats.columns = ['event', 'mean', 'sem']
+        file_stats = file_stats.T
+        cols = file_stats.iloc[0, :]
+        file_stats = file_stats.iloc[1:, :]
+        file_stats.columns = cols
+        file_stats = self.reorder_stats_columns(file_stats)
+        return file_stats
+
+    @property
+    def means(self):
+        return self.final_stats.iloc[0, :]
+
+    @property
+    def sems(self):
+        return self.final_stats.iloc[1, :]
+
+    def reorder_stats_columns(self, df):
+        existing_cols = [col for col in self.params.order if col in df.columns]
+        remaining_cols = [col for col in df.columns if col not in existing_cols]
+        new_cols = existing_cols + remaining_cols
+        return df[new_cols]
+
+    def __populate(self):
+        count = 0
+        for var in self.nex['Variables']:
+            if var['Header']['Type'] == 2:
+                self.intervals[var['Header']['Name']] = var['Intervals']
+            if var['Header']['Type'] == 0:
+                self.neurons[[var['Header']['Name']][0]] = var['Timestamps']
+                self.neurostamps = var['Timestamps']
+                self.__neuron_df = pd.DataFrame({'timestamp': self.neurostamps})
+                count += 1
+        self.ensemble = True if count > 1 else False
+
+    def get_intervals_df(self):
+        intervals_list = []
+        for event, (start_times, end_times) in self.intervals.items():
+            if event not in ['AllFile', 'nospo']:
+                for start, end in zip(start_times, end_times):
+                    intervals_list.append({'event': event, 'start_time': start, 'end_time': end})
+        return pd.DataFrame(intervals_list)
+
+    @staticmethod
+    def bin_spikes(relative_timestamps, bin_size=1):
+        if hasattr(relative_timestamps, 'size') and relative_timestamps.size == 0:
+            return []
+
+        max_time = max(relative_timestamps)
+        num_bins = int(np.ceil(max_time / bin_size))
+        binned_spike_counts = np.zeros(num_bins)
+
+        for spike_time in relative_timestamps:
+            bin_index = int(spike_time // bin_size)
+            binned_spike_counts[bin_index] += 1
+
+        binned_spike_rates = binned_spike_counts / bin_size
+        return binned_spike_rates.tolist()
+
+    @staticmethod
+    def get_relative_timestamps(row, neuron_df):
+        start = row['start_time']
+        end = row['end_time']
+
+        mask = (neuron_df['timestamp'] >= start) & (neuron_df['timestamp'] <= end)
+        event_neurons = neuron_df[mask]['timestamp'] - start
+        relative_timestamps = event_neurons.to_list()
+        return np.asarray(relative_timestamps)
+

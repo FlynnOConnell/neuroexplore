@@ -1,9 +1,5 @@
 from pathlib import Path
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from data_utils import *
-from data_utils import neuron as dh
+from data_utils import data_collection
 
 
 def output(files):
@@ -15,7 +11,13 @@ def output(files):
 if __name__ == "__main__":
 
     datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles')
-    file = dh.Neuron(datadir / 'sf' / 'SFN11_2018-07-17_SF.nex')
+    data = data_collection.DataCollection(datadir)
+    data.get_data(paradigm='sf')
+    data.get_data(paradigm='rs')
+    # data.get_stats()
+    # files = data.files['sf']
+    # data.output(r'C:\Users\Flynn\OneDrive\Desktop\temp\output.xlsx')
+    # file = dh.Neuron(datadir / 'sf' / 'SFN11_2018-07-17_SF.nex')
     # collector = data_collection.DataCollection(datadir)
     # collector.get_data_sf()
     # sf_files = collector.files

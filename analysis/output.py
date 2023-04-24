@@ -22,11 +22,3 @@ class Output:
         self.file_outer.to_excel(file_path,
                                  index=False,
                                  sheet_name='file_stats',)
-
-    # @staticmethod
-    # def to_excel(self, data, file_path):
-    #     outdata = self.files
-    #     for day, data in outdata.items():
-    #
-    #     df.to_excel(file_path, index=False)
-

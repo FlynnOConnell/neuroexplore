@@ -33,7 +33,19 @@ class Params:
             self.colors['spont'] = 'gray'
 
             self.stats_columns = ['Spont'] + self.well_events + self.eating_events
-            self.df_cols = ['animal', 'date', 'neuron'] + self.stats_columns + self.stats_columns
+            self.df_cols = ['animal', 'date'] + self.stats_columns + self.stats_columns
+
+            self.tastants = (
+                        'T1_A1',
+                        'T1_AS1',
+                        'T1_M1',
+                        'T1_N1',
+                        'T1_Q1',
+                        'T1_S1'
+                        )
+
+            self.colors = ('Blue', 'Yellow', 'Purple', 'Green', 'Violet', 'Orange')
+
 
 
 

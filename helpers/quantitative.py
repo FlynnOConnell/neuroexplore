@@ -1,9 +1,120 @@
+import nex.nexfile
+import ruptures as rpt
 import numpy as np
+import sys
+import matplotlib
+
+matplotlib.use('Agg')
+import matplotlib.pyplot as plot
+import math
+import os
+import time
+import shutil
+from datetime import datetime
 import pandas as pd
 from scipy import stats, signal
-import seaborn as sns
-import matplotlib.pyplot as plt
+from matplotlib import patches
 
+# %% USER PARAMETERS
+
+path = r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles'
+output_path = r'C:\Users\Flynn\OneDrive\Desktop\temp'
+outfile = 'rs_output'
+
+# Enter your tastant names as they appear in your NEX File
+tastants = (
+    'T1_A1',
+    'T1_AS1',
+    'T1_M1',
+    'T1_N1',
+    'T1_Q1',
+    'T1_S1'
+)
+
+colors = ('Blue', 'Yellow', 'Purple', 'Green', 'Violet', 'Orange')
+lick = 'Lick'
+rinse = 'Rinse'
+rinsecolor = 'Cyan'
+drylickcolor = 'Gray'
+
+dospont = 1
+do5L = 1
+do5L_PSTH = 0
+doLXL_PSTH = 0
+doLXL = 1
+doCOH = 0
+doILI = 1
+doLAS = 0
+doBL = 1
+
+# %% General
+
+# window for determining artifact licks
+artifact = .1
+# tolerance for adjusting timestaamps to lick variable
+ts_adjust = .005
+# dpi for saving images
+pxl = 1000
+# p_value for effect of laser
+laser_q = .01
+# method for evaluation end of laser, options are 'laser' or 'trial' if a value will use that value (Seconds)
+endmethod = 2
+# Should PSTH markers be outlined or filled
+markerfill = True
+# sets the size of the markers
+markerscale = .7
+# sets the range on the x axis for lxl PSTH (seconds)
+lxl_xrange = (-.1, .2)
+# lxl bin size (seconds) for graphing
+lxl_hist_bin = .01
+
+# %% Spontaneous activity
+# Minimum width of 'spontaneous activity' for neurons seconds
+spont = 10
+# Time after licking before a 'spontaneous activity' window can begin, seconds
+prespont = 3
+# Time prior to a lick that a 'spontaneous activity' window is cut off, seconds
+postspont = 1
+# Bin width for obtaining std deviation of spontaneous firing rate seconds
+spontbin = 1
+
+# %% Change point analysis (5-Lick)
+boot_alpha = .05
+alpha_tol = .005
+bootstrap_n = 1000
+# Length of post-stimulus time to consider
+trial_end = 4
+# Window width
+bin5L = .1
+# Minimum response duration
+minresp = .3
+# Width of baseline period (seconds)
+base = 2
+model = 'l1'
+
+# %% LXL
+
+# method, currently only option is "CHISQ" (for chi-square goodness of fit)
+lxl_method = "CHISQ"
+# number of samples for each monte carlo approximation (exact multinomial test)
+monte_n = 100000
+# Maximum p-value (percentile) to be considered significant,
+chi_alpha = 0.05
+# Length of post-stimulus time to consider
+lick_max = .150
+lick_window = .015
+wil_alpha = .05
+
+# %% Coherence
+max_freq = 50  # maximum frequency value in Hz
+num_freq = 256  # number of frequency values to use
+window = 'hann'  # windowing function to be applied to data,
+# look up scipy.signal.get_window for options, default is 'hann'
+overlap = .5  # percent of 1 (1=100%, .5 (50%) default value
+coh_alpha = .01  # maximum p-value to be considered significant
+cohbins = 3  # number of significant bins for cell to be considered coherent
+
+# %% Functions
 
 def fdr(pvals, q, stimuli):
     """computes false discovery adjusted p-values for multiple comparisons.
@@ -24,7 +135,6 @@ def fdr(pvals, q, stimuli):
     fdr_data.insert(2, 'pN', pN)
     return fdr_data
 
-
 def f_test(x, y):
     """Runs f_test to compare variances."""
     x, y = np.array(x), np.array(y)
@@ -38,18 +148,16 @@ def f_test(x, y):
     p = 1 - stats.f.cdf(f, dfn, dfd)  # find p-value of F test statistic
     return f, p
 
+
 def get_spk_bins(trial_times, neur, start, end, binsize):
     """Bins spikes."""
     start = abs(start)
     allspk = []
     for teemay in trial_times:
-        allspk.extend((neur[np.where(
-            (neur > teemay - start) & (neur < teemay + end))] - teemay).tolist())
-    bins = \
-        np.histogram(allspk,
-                     np.linspace(-start, end, num=int((start + end) / binsize) + 1))[
-            0]
+        allspk.extend((neur[np.where((neur > teemay - start) & (neur < teemay + end))] - teemay).tolist())
+    bins = np.histogram(allspk, np.linspace(-start, end, num=int((start + end) / binsize) + 1))[0]
     return bins
+
 
 def binmerge(expected, observed):
     """ Merges bins in the case where bin counts would invalidate chi square. """
@@ -58,81 +166,20 @@ def binmerge(expected, observed):
     if len(np.where(e < 1)[0]) > 0:  # if any bins are less than one
         for bin in np.where(e < 1)[0]:  # merge each bin with the following bin
             if bin == len(e) - 1: bin = bin - 1  # if the last bin move counter back one
-            e[bin + 1], o[bin + 1] = e[bin + 1] + e[bin], o[bin + 1] + o[
-                bin]  # merge bins
+            e[bin + 1], o[bin + 1] = e[bin + 1] + e[bin], o[bin + 1] + o[bin]  # merge bins
             e[bin], o[bin] = 0, 0
         o = o[np.where(e != 0)[0]]  # remove 0 bins
         e = e[np.where(e != 0)[0]]
-    while len(np.where(e < 5)[0]) / len(e) > .2 and len(
-            e) > 1:  # greater than 80% of bins must be 5 or higher
+    while len(np.where(e < 5)[0]) / len(e) > .2 and len(e) > 1:  # greater than 80% of bins must be 5 or higher
         bin = np.where(e < 5)[0][0]  # find first offending bin and merge
         if bin == len(e) - 1: bin = bin - 1
         e[bin + 1], o[bin + 1] = e[bin + 1] + e[bin], o[bin + 1] + o[bin]
         e[bin], o[bin] = 0, 0
         o = o[np.where(e != 0)[0]]
         e = e[np.where(e != 0)[0]]
-        e = e[np]
     return e, o
 
-def LXL(
-        stim, neur, dryhist, ndry, lick_max=.150,
-        lick_window=.015, wil_alpha=.05, chi_alpha=.05, drylick=None, tastants=None):
-    """Run a lick-by-lick taste response calculation."""
-    tastespikes = []
-    # get all spike timestamps around tastant activity,
-    # time adjusted around each tastant lick
-    for i in range(len(stim)):
-        tastespikes.extend(
-            neur[np.where((neur >= stim[i]) & (neur < (stim[i] + lick_max)))] - stim[i])
-    ntaste = len(tastespikes)  # number of taste spikes
-    tasteobs = \
-        np.histogram(tastespikes, np.arange(0, lick_max + lick_window, lick_window))[
-            0]  # bin the tastant spikes
-    expected = dryhist * ntaste / ndry
-    if sum(expected) >= 10:
-        expected, tasteobs = binmerge(expected, tasteobs)
-        chi_stat, gof_p = stats.chisquare(tasteobs, f_exp=expected)  # run chi square
-        # get firing rates for drylick and tastant
-        dryfire = (expected * ndry / ntaste) / len(
-            trial_times[drylick + '_lxl']) / lick_window
-        tastefire = tasteobs / len(stim) / lick_window
-        respmag = np.mean(np.absolute(tastefire - dryfire))  # response magnitude
-        resptype = 0
-        wstat, pval = stats.wilcoxon(dryfire, tastefire)  # run wilcoxon
-        if pval < wil_alpha:  # if wilcoxon is significant, add response type
-            if sum(tastefire - dryfire) > 0:
-                resptype = 'Excitatory'
-            elif sum(tastefire - dryfire) < 0:
-                resptype, respmag = 'Inhibitory', respmag * -1
-        else:
-            resptype = 'Time Course'
-    else:
-        gof_p = 1
-    q_value = gof_p * len(tastants)  # bonferroni correction
-    # if the chi square is significant, record the taste response
-    if q_value < chi_alpha:
-        this_LXL = {
-            'File Name'         : file,
-            'Neuron'            : neuron,
-            'Tastant'           : tastant,
-            'Trial Count'       : len(stim),
-            'P-Value'           : gof_p,
-            'Q-Value'           : q_value,
-            'Response Magnitude': respmag,
-            'Wilcoxon_p'        : pval,
-            'Response_Type'     : resptype}
-    else:
-        this_LXL = {
-            'File Name'         : file,
-            'Neuron'            : neuron,
-            'Tastant'           : tastant,
-            'Trial Count'       : len(stim),
-            'P-Value'           : gof_p,
-            'Q-Value'           : q_value,
-            'Response Magnitude': 'nan',
-            'Wilcoxon_p'        : 'nan',
-            'Response_Type'     : 'nan'}
-    return this_LXL
+
 
 def spont_intervals(licks, start, stop, prespont, postspont):
     """Determine the intervals for spontaneous activity evaluation."""
@@ -153,9 +200,9 @@ def spont_intervals(licks, start, stop, prespont, postspont):
     spont_times = tuple(zip(spont_starts, spont_ends))
     return spont_times
 
-def get_5L_penalty(
-        trial_times, neur, bootstrap_n=1000,
-        boot_alpha=.05, alpha_tol=.005):
+
+def get_5L_penalty(trial_times, neur, bootstrap_n=1000,
+                   boot_alpha=.05, alpha_tol=.005):
     """Obtain penalty value for us in change-point calculation."""
     bootbins = []
     for key, value in trial_times.items():  # for each tastant
@@ -164,11 +211,10 @@ def get_5L_penalty(
         allspikes = []
         # for each trial, collect the spikes, normalized for trial time
         for trial_time in value:
-            allspikes.extend((neur[np.where((neur > trial_time - base) & (
-                    neur < trial_time + trial_end))] - trial_time).tolist())
+            allspikes.extend(
+                (neur[np.where((neur > trial_time - base) & (neur < trial_time + trial_end))] - trial_time).tolist())
         # create histogram of spikes
-        allbins = np.histogram(allspikes, np.linspace(-base, trial_end, num=int(
-            (trial_end + base) / bin5L + 1)))[0]
+        allbins = np.histogram(allspikes, np.linspace(-base, trial_end, num=int((trial_end + base) / bin5L + 1)))[0]
         bootbins.extend(allbins)  # add the bins to the list for bootstrapping
     random.seed(a=34)  # set random seed
     bootpen = 1
@@ -207,59 +253,3 @@ def get_5L_penalty(
             # increase the penalty value
             bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a
     return bootpen, eff_a
-
-def sort_by_col(arr: np.ndarray):
-    for col in range(arr.shape[1]):
-        arr[:,col] = -np.sort(-arr[:,col])
-    return arr
-
-y_new = sort_by_col(y)
-
-fig, ax = plt.subplots()
-ax.xaxis.set_ticklabels(np.arange(-2, 5, 1))
-ax.xaxis.set_ticks(np.arange(-2, 5, 1))
-sns.heatmap(y, cmap='plasma')
-
-ax.set_title("Spectrogram", fontweight='bold')
-ax.set_xlabel("Time(s)")
-ax.set_ylabel("Frequency (Hz)", fontweight='bold')
-plt.tight_layout()
-plt.show()
-
-# for spikes, events, colors in data.generate_trials_strict():
-#     x += 1
-#     histo = plot.Plot(spikes, events, colors)
-#     histo.histogram()
-
-
-temp = []
-
-frequency_range = np.round(np.linspace(0, np.amax(y), 10), 1)
-spectrogram = np.zeros(shape=(frequency_range.shape[0], np.arange(-2, 5, 0.1)[:-1].shape[0]))
-
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-rng = np.random.default_rng()
-time = np.round(np.arange(-2, 5, 0.1)[:-1], 1)
-
-vals = np.random.randint(0, 150, size=(frequency_range.shape[0], time.shape[0]))
-fix, ax = plt.subplots()
-
-
-xlab = [-2, 0, 1, 2, 3, 4, 5, 6]
-xpos = [0, 10, 20, 30, 40, 50, 60, 70]
-ypos = [10, 0]
-ylab = [0, 150]
-ax = sns.heatmap(vals, cmap='plasma', ax=ax)
-ax.xaxis.set_ticks([0, 10, 20, 30, 40, 50])
-ax.xaxis.set_ticklabels([-2, 0, 1, 2, 3, 4])
-ax.yaxis.set_ticks(ypos)
-ax.yaxis.set_ticklabels(ylab)
-ax.set_title("Frequency Matrix", fontweight='bold')
-ax.set_xlabel("Time (s)")
-ax.set_ylabel("Frequency (Hz)", fontweight='bold')
-
-plt.show()
-# average = [len(tstamps[np.where((interval[0] <= tstamps) & (tstamps <= interval[1]))]) / (interval[1] - interval[0]) for interval in data.interval_gen("Spont")]

@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from collections import namedtuple
 from typing import Dict, List
+from nex.nexfile import Reader
 from pathlib import Path
 
 def find_matching_files(directory: str | Path, match_string: str) -> Dict[str, List[str]]:
@@ -69,10 +70,11 @@ def unique_path(directory, filename) -> Path:
         if not path.exists():
             return path
 
-def tree(directory) -> None:
-    print(f"-|{directory}")
-    for path in sorted(directory.rglob("[!.]*")):  # exclude .files
-        depth = len(path.relative_to(directory).parts)
-        spacer = "    " * depth
-        print(f"{spacer}-|{path.name}")
-        return None
+def get_nex(file_path: str | Path):
+    reader = Reader(useNumpy=True)
+    return reader.ReadNexFile(file_path)
+
+if __name__ == "__main__":
+    main_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\allfiles")
+    sf_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\sf")
+    files = find_matching_files(sf_dir, "*.nex")

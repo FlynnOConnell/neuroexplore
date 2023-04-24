@@ -1,49 +1,105 @@
 from __future__ import annotations
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
-from typing import Tuple, Generator
-from pathlib import Path
+from collections import namedtuple
 import numpy as np
 import scipy.stats as stats
 import pandas as pd
 from params import Params
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
-class Signals:
-    def __init__(
-            self,
-            __nexdata: dict,
-    ) -> None:
-
-        self.__nexdata = __nexdata
+class EatingSignals:
+    def __init__(self, nexdata: dict) -> None:
+        self.nex = nexdata
+        self.ensemble = False
         self.params = Params()
-        self.neuron: str = ''
-        self.neurostamps = []
+        self.neurons: dict = {}
         self.intervals = {}
         self.__populate()
+        self.event_df = self.get_event_df()
+        self.neuron_df = self.build_neuron_df()
+        self.mean_df = pd.DataFrame()
+        self.sem_df = pd.DataFrame()
+        self.update_mean_and_sem_dataframes(self.neuron_df)
+        self.num_ts = {key: len(value) for key, value in self.neurons.items()}
 
-        self.intervals_df = pd.DataFrame(columns=['event', 'start_time', 'end_time'])
-        self.get_intervals_df()
-        self.intervals_df['relative_timestamps'] = self.intervals_df.apply(self.get_relative_timestamps, axis=1, neuron_df=self.__neuron_df)
-        self.intervals_df['binned_spike_rates'] = self.intervals_df['relative_timestamps'].apply(self.bin_spikes,
-                                                                                                 bin_size=self.params.binsize)
-        self.intervals_df['num_spikes'] = self.intervals_df['relative_timestamps'].apply(len)
-        self.intervals_df['duration'] = self.intervals_df['end_time'] - self.intervals_df['start_time']
-        self.intervals_df = self.intervals_df[self.intervals_df['duration'] >= 1]
+    def __repr__(self) -> str:
+        ens = '-E' if self.ensemble else ''
+        return f'{self.__class__.__name__}{ens}'
 
-        self.intervals_df['mean_spike_rate'] = self.intervals_df['binned_spike_rates'].apply(np.mean)
-        self.intervals_df['sem_spike_rate'] = self.intervals_df['binned_spike_rates'].apply(stats.sem)
-        self.final_stats = pd.DataFrame(columns=['Spont', 'mean', 'sem'])
-        self.file_stats = self.intervals_df.groupby('event')['mean_spike_rate'].agg(['mean', 'sem']).reset_index()
+    @staticmethod
+    def get_spike_times_within_interval(timestamps, start, end):
+        return timestamps[(timestamps >= start) & (timestamps <= end)]
 
-        self.file_stats.columns = ['event', 'mean', 'sem']
-        self.file_stats = self.file_stats.T
-        cols =  self.file_stats.iloc[0, :]
-        self.file_stats =  self.file_stats.iloc[1:, :]
-        self.file_stats.columns = cols
-        self.file_stats = self.reorder_stats_columns(self.file_stats)
-        self.means = self.file_stats.iloc[0, :]
-        self.sems =  self.file_stats.iloc[1, :]
+    def build_neuron_df(self):
+        results = []
 
+        # Loop through each neuron and its timestamps
+        for neuron, timestamps in self.neurons.items():
+            # Loop through each row in the events_df
+            for _, row in self.event_df.iterrows():
+                spike_times_within_interval = self.get_spike_times_within_interval(
+                    timestamps, row['start_time'], row['end_time'])
+                spike_rate = len(spike_times_within_interval) / (row['end_time'] - row['start_time'])
+
+                results.append({
+                    'neuron': neuron,
+                    'event': row['event'],
+                    'mean_spike_rate': spike_rate
+                })
+
+        # Convert the list to a DataFrame
+        spike_rates_df = pd.DataFrame(results)
+
+        # Create a new DataFrame to store the results for each neuron and event
+        final_results_df = pd.DataFrame(columns=['neuron', 'event', 'mean', 'sem'])
+
+        for neuron in spike_rates_df['neuron'].unique():
+            for event in spike_rates_df['event'].unique():
+                mask = (spike_rates_df['neuron'] == neuron) & (spike_rates_df['event'] == event)
+                mean_spike_rate = spike_rates_df.loc[mask, 'mean_spike_rate'].mean()
+                sem_spike_rate = stats.sem(spike_rates_df.loc[mask, 'mean_spike_rate'])
+
+                final_results_df = final_results_df.append({
+                    'neuron': neuron,
+                    'event': event,
+                    'mean': mean_spike_rate,
+                    'sem': sem_spike_rate
+                }, ignore_index=True)
+
+        return final_results_df
+
+
+    def update_mean_and_sem_dataframes(self, final_results_df):
+        unique_neurons = np.unique(final_results_df['neuron'])
+        unique_events = np.unique(final_results_df['event'])
+
+        if self.mean_df.empty:
+            self.mean_df = pd.DataFrame({'neuron': unique_neurons})
+            self.sem_df = pd.DataFrame({'neuron': unique_neurons})
+
+        for event in unique_events:
+            mean_values = []
+            sem_values = []
+
+            for neuron in unique_neurons:
+                mask = (final_results_df['neuron'] == neuron) & (final_results_df['event'] == event)
+                mean_value = final_results_df.loc[mask, 'mean'].values[0]
+                sem_value = final_results_df.loc[mask, 'sem'].values[0]
+
+                mean_values.append(mean_value)
+                sem_values.append(sem_value)
+
+            self.mean_df[event] = mean_values
+            self.sem_df[event] = sem_values
+
+    @property
+    def means(self):
+        return self.mean_df
+
+    @property
+    def sems(self):
+        return self.sem_df
 
     def reorder_stats_columns(self, df):
         existing_cols = [col for col in self.params.order if col in df.columns]
@@ -52,45 +108,23 @@ class Signals:
         return df[new_cols]
 
     def __populate(self):
-        for var in self.__nexdata['Variables']:
+        count = 0
+        self.neurons = {}
+        for var in self.nex['Variables']:
             if var['Header']['Type'] == 2:
                 self.intervals[var['Header']['Name']] = var['Intervals']
             if var['Header']['Type'] == 0:
-                self.neuron = [var['Header']['Name']][0]
-                self.neurostamps = var['Timestamps']
-                self.__neuron_df = pd.DataFrame({'timestamp': self.neurostamps})
+                self.neurons[var['Header']['Name']] = var['Timestamps']
+                count += 1
+        self.ensemble = True if count > 1 else False
 
-    def get_intervals_df(self):
+    def get_event_df(self):
         intervals_list = []
         for event, (start_times, end_times) in self.intervals.items():
-            if event not in ['AllFile', 'nospo']:
+            if event not in ['AllFile', 'nospo', 'ALLFILE', 'start', 'Interbout_int']:
                 for start, end in zip(start_times, end_times):
                     intervals_list.append({'event': event, 'start_time': start, 'end_time': end})
-        self.intervals_df = pd.DataFrame(intervals_list)
 
-    @staticmethod
-    def bin_spikes(relative_timestamps, bin_size=1):
-        if hasattr(relative_timestamps, 'size') and relative_timestamps.size == 0:
-            return []
-
-        max_time = max(relative_timestamps)
-        num_bins = int(np.ceil(max_time / bin_size))
-        binned_spike_counts = np.zeros(num_bins)
-
-        for spike_time in relative_timestamps:
-            bin_index = int(spike_time // bin_size)
-            binned_spike_counts[bin_index] += 1
-
-        binned_spike_rates = binned_spike_counts / bin_size
-        return binned_spike_rates.tolist()
-
-    @staticmethod
-    def get_relative_timestamps(row, neuron_df):
-        start = row['start_time']
-        end = row['end_time']
-
-        mask = (neuron_df['timestamp'] >= start) & (neuron_df['timestamp'] <= end)
-        event_neurons = neuron_df[mask]['timestamp'] - start
-        relative_timestamps = event_neurons.to_list()
-        return np.asarray(relative_timestamps)
-
+        intervals_df = pd.DataFrame(intervals_list)
+        intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
+        return intervals_df

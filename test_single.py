@@ -3,13 +3,15 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from data_utils import data_collection, file_handling, neural_signals, neuron, signals_food
+# from data_utils import data_collection, file_handling, neural_signals, neuron, signals_food
 from analysis import output
 from nex.nexfile import Reader
 from params import Params
 from data_utils.file_handling import parse_filename
+from data_utils import signals_food as sf
+from data_utils import signals_stimuli as ss
 
-datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\test')
+datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs\SFN13_2018-12-11_RS_OBEX.nex')
 reader = Reader(useNumpy=True)
 params = Params()
 def concat_series_to_dataframe(df, series):
@@ -34,16 +36,18 @@ def concat_series_to_dataframe(df, series):
 
     return updated_df
 
-info_df = pd.DataFrame(columns=['animal', 'date', 'neuron'])
-means_df = pd.DataFrame(columns=params.stats_columns)
-sems_df = pd.DataFrame(columns=params.stats_columns)
+# session_info = parse_filename(datadir.name)
+__fileData = reader.ReadNexFile(str(datadir))
+# nex = sf.EatingSignals(__fileData)
 
-for file_path in datadir.glob('*.nex'):
+nex_rs = ss.StimuliSignals(__fileData, datadir.name)
+nex_rs.get_allstats()
 
-    session_info = file_handling.parse_filename(file_path.name)
-    if (session_info.date == '2018-08-27') & (session_info.animal == 'SFN11'):
-        __fileData = reader.ReadNexFile(file_path)
-        nex = signals_food.Signals(__fileData)
-        means_df = concat_series_to_dataframe(means_df, nex.means)
-        sems_df = concat_series_to_dataframe(sems_df, nex.sems)
-
+# for file_path in datadir.glob('*.nex'):
+#
+#     session_info = file_handling.parse_filename(file_path.name)
+#     if (session_info.date == '2018-08-27') & (session_info.animal == 'SFN11'):
+#         __fileData = reader.ReadNexFile(file_path)
+#         nex = signals_food.Signals(__fileData)
+#         means_df = concat_series_to_dataframe(means_df, nex.means)
+#         sems_df = concat_series_to_dataframe(sems_df, nex.sems)
