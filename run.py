@@ -12,8 +12,8 @@ if __name__ == "__main__":
 
     datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles')
     data = data_collection.DataCollection(datadir)
-    data.get_data(paradigm='sf')
-    data.get_data(paradigm='rs')
+    # data.get_data(paradigm='sf')
+    data.get_data(paradigm='rs', functions_to_run=['all'])
     # data.get_stats()
     # files = data.files['sf']
     # data.output(r'C:\Users\Flynn\OneDrive\Desktop\temp\output.xlsx')

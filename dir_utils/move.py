@@ -3,29 +3,40 @@
 from __future__ import annotations
 from pathlib import Path
 import os
+import openpyxl
 import shutil
 
-def move_files_with_keywords(src_dir, rs_dest_dir, sf_dest_dir):
+def move_files_with_keywords(src_dir, move_dir, search_list):
     # Ensure destination directories exist
-    os.makedirs(rs_dest_dir, exist_ok=True)
-    os.makedirs(sf_dest_dir, exist_ok=True)
+    os.makedirs(move_dir, exist_ok=True)
 
     # Iterate over files in the source directory
     for filename in os.listdir(src_dir):
         file_path = os.path.join(src_dir, filename)
 
-        # Check if the file contains "RS" or "SF" and move accordingly
+        # Check if the file contains any keywords in the search list and move accordingly
         if os.path.isfile(file_path):
-            if 'RS' in filename:
-                shutil.move(file_path, os.path.join(rs_dest_dir, filename))
-                print(f"Moved {filename} to {rs_dest_dir}")
-            elif '_SF' in filename:
-                shutil.move(file_path, os.path.join(sf_dest_dir, filename))
-                print(f"Moved {filename} to {rs_dest_dir}")
+            for keyword in search_list:
+                if keyword in filename:
+                    shutil.move(file_path, os.path.join(move_dir, filename))
+                    print(f"Moved {filename} to {move_dir}")
+                    search_list.remove(keyword)
+                    break
+
 
 if __name__ == "__main__":
 
-    main_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\allfiles")
-    rs_dest_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\org\nex_rs")
-    sf_dest_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\org\nex_sf")
-    move_files_with_keywords(main_dir, rs_dest_dir, sf_dest_dir)
+    # Change these ------------------------
+    # main_dir = Path(r"/path/to/search")
+    # move_dir = Path(r"/your/path/to/move/to")
+    workbook = Path(r"C:\Users\Flynn\OneDrive\Desktop\temp\workbook.xlsx")
+    # --------------------------------------
+    workbook = openpyxl.load_workbook(workbook)
+    worksheet = workbook['FY 22 Billings']
+
+    search_list = []
+    for row in worksheet.iter_rows(min_row=2, min_col=3, values_only=True):
+        value = str(row[0])
+        search_list.append(value)
+
+    # move_files_with_keywords(main_dir, move_dir, search_list)

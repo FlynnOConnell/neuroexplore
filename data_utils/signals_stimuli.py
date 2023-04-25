@@ -1,7 +1,6 @@
 from __future__ import annotations
 import warnings
 import sys
-from collections import namedtuple
 import ruptures as rpt
 import numpy as np
 import scipy.stats as stats
@@ -15,24 +14,25 @@ warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
 class StimuliSignals:
     def __init__(self, nexdata: dict, filename: str) -> None:
-        self.filename = filename
         self.nex = nexdata
+        self.filename = filename
+        self.cp_storage = []
+        self.notes = {self.filename: []}
+        self.all_responses = {}
+
         self.ensemble = False
         self.params = Params()
         self.lick = 'Lick'
         self.rinse = 'Rinse'
-        self.all_events = (self.params.tastants + (self.lick, self.rinse))
-
-
+        self.all_events = (self.params.tastants_opts + (self.lick, self.rinse))
         self.timestamps = {}
         self.reinforced_licks = []
         self.drylicks = []
         self.neurons = ()
         self.trial_times = {}
         self.drylick_trials = []
-        self.tastants = self.params.tastants
+        self.tastants = None
         self.drylick = 'drylick'
-        self.all_LXL, self.all_spont, self.all_COH, self.all_5L, self.all_ILI, self.all_baseline = [], [], [], [], [], []
         self.final_df = {}
         self.__populate()
 
@@ -54,98 +54,110 @@ class StimuliSignals:
         count = 0
         self.timestamps['Start'] = np.asarray([0.0])
         self.timestamps['Stop'] = np.asarray([0.0])
+
         for var in self.nex['Variables']:
             if (var['Header']['Name'] in self.all_events) or (var['Header']['Type'] == 0):
                 self.timestamps[var['Header']['Name']] = var['Timestamps']
             if var['Header']['Type'] == 0:
-                self.neurons = self.neurons+tuple([var['Header']['Name']])
+                self.neurons += (var['Header']['Name'],)
                 count += 1
-        self.ensemble = True if count > 1 else False
 
+        self.ensemble = count > 1
+        self.tastants = tuple(event for event in self.all_events if event in self.timestamps.keys())
         for key, value in self.timestamps.items():
             if max(value) > self.timestamps['Stop'][0]:
                 self.timestamps['Stop'] = np.asarray([max(value)])
-            # if it is not licks, and it is not a neuron
-            if not key == self.lick and key in self.all_events:
-                for ts in value:  # for each timestamp
-                    # if the timestamp is not in the lick array
-                    if ts not in self.timestamps[self.lick]:
-                        # find the associated timestamp in the lick array
-                        correct_time = \
-                        np.where((self.timestamps[self.lick] < ts + .005) & (self.timestamps[self.lick] > ts - .005))[0]
-                        # there should only be one timestamp near the incorrect one
-                        if len(correct_time) == 1:
-                            # if so, replace the original with
-                            # the correct timestamp
-                            value[np.where(value == ts)[0]
-                            ] = self.timestamps[self.lick][correct_time]
-                        elif len(correct_time) == 0:
-                            value = np.delete(value, np.where(value == ts)[0])
-                            print('Lick removed from {} due to not being in lick variable'.format(key))
-                        else:
-                            sys.exit("Not the correct amount of licks")
-                # this just checks through to make
-                # sure all the licks were corrected
-                for ts in value:
-                    if ts not in self.timestamps[self.lick]:
-                        sys.exit("man we missed one of the licks")
-                    else:
-                        # add this to the list of reinforced licks
-                        self.reinforced_licks.append(ts)
-                # replace the old values with the corrected values
-                self.timestamps[key] = value
-        for lick_event in self.timestamps['Lick']:  # get drylicks
-            if lick_event not in  self.reinforced_licks:  # if it's not a reinforced lick
-                self.drylicks.append(lick_event)  # it's a drylick
-        # add the drylicks to the timestamps dict
-        self.timestamps[self.drylick] = np.array(self.drylicks)
-        for tastant in self.tastants:  # get starts of 5-lick trials
-            tastant1 = []
-            # go through each timestamp, and
-            # determine whether the previous lick was a drylick
-            for ts in self.timestamps[tastant]:
-                if self.timestamps[self.lick][np.where(self.timestamps[self.lick] == ts)[0]-1] in self.timestamps[self.drylick]:
-                    # if so , that was the first lick of the trial
-                    tastant1.append(ts)
-                    self.drylick_trials.append(self.timestamps[self.lick][np.where(self.timestamps[self.lick] == ts)[0]-1][0])
-            # trial start times used for 5L and ILI
-            self.trial_times[tastant] = np.array(tastant1)
-        self.trial_times[self.drylick+'_lxl'] = np.array(self.drylick_trials)
 
-    def get_allstats(self):
-        self.coherence()
-        self.coherence()
-        self.ili()
-        self.spont()
-        self.baseline()
-        self.changepoint()
-        self.chisquareLXL()
+            if not key == self.lick and key in self.all_events:
+                corrected_values = []
+                for ts in value:
+                    correct_time = \
+                    np.where((self.timestamps[self.lick] < ts + .005) & (self.timestamps[self.lick] > ts - .005))[0]
+                    if len(correct_time) == 1:
+                        corrected_values.append(self.timestamps[self.lick][correct_time][0])
+                    elif len(correct_time) == 0:
+                        print('Lick removed from {} due to not being in lick variable'.format(key))
+                    else:
+                        sys.exit("Not the correct amount of licks")
+
+                self.timestamps[key] = np.array(corrected_values)
+                self.reinforced_licks.extend(corrected_values)
+
+        self.drylicks = [lick_event for lick_event in self.timestamps['Lick'] if
+                         lick_event not in self.reinforced_licks]
+        self.timestamps[self.drylick] = np.array(self.drylicks)
+
+        for tastant in self.tastants:
+            tastant1 = []
+            for ts in self.timestamps[tastant]:
+                if self.timestamps[self.lick][np.where(self.timestamps[self.lick] == ts)[0] - 1] in self.timestamps[
+                    self.drylick]:
+                    tastant1.append(ts)
+                    self.drylick_trials.append(
+                        self.timestamps[self.lick][np.where(self.timestamps[self.lick] == ts)[0] - 1][0])
+            self.trial_times[tastant] = np.array(tastant1)
+        # remove tastants with too many trials
+        self.trial_times = {trial: arr for trial, arr in self.trial_times.items() if arr.size <= 25}
+        self.trial_times[self.drylick + '_lxl'] = np.array(self.drylick_trials)
+
+    def run_stats(self, functions_to_run):
+        """ Runs the functions specified in the functions_to_run list."""
+        function_map = {
+            'coherence': self.coherence,
+            'ili': self.ili,
+            'spont': self.spont,
+            'baseline': self.baseline,
+            'changepoint': self.changepoint,
+            'chisquareLXL': self.chisquareLXL
+        }
+
+        for function_name in functions_to_run:
+            if 'all' in function_name:
+                for func in function_map:
+                    function_map[func]()
+            if function_name in function_map:
+                function_map[function_name]()
+            else:
+                print(f"Function '{function_name}' not found.")
 
     def spont(self, spontbin=1):
-        spontbins = None
+        all_spont = []
         spont_times = self.spont_intervals(
-            self.timestamps[self.lick],  self.timestamps['Start'],  self.timestamps['Stop'], 3, 1)
+            self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
+        )
+
         for neuron in self.neurons:
-            if len(spont_times) > 0:  # only run if there were spontaneous intervals
+            if len(spont_times) > 0:
                 spontbins = []
-                for i in range(0, len(spont_times)):  # for each interval
-                    # get all if the neuron spikes for this interval
-                    spont_spikes = self.timestamps[neuron][np.where((self.timestamps[neuron] >= spont_times[i][0]) & (
-                            self.timestamps[neuron] < spont_times[i][1]))[0]] - spont_times[i][0]
-                    # bin the spikes and add to the list
-                    spontbins.extend(np.divide(np.histogram(spont_spikes, range(0, math.floor(
-                        (spont_times[i][1] - spont_times[i][0]) / 1) * spontbin + 1, spontbin))[0],
-                                               spontbin).tolist())
-            # get the mean and STD of the spontaneous spike rate
-            self.all_spont.append({'File Name': self.filename, 'Neuron': neuron, 'Mean Spont': np.mean(
-                spontbins), 'SD Spont': np.std(spontbins, ddof=1)})
-        self.final_df['spont'] = pd.DataFrame(self.all_spont)
+
+                for start, end in spont_times:
+                    spont_spikes = self.timestamps[neuron][
+                                       (self.timestamps[neuron] >= start) &
+                                       (self.timestamps[neuron] < end)
+                                       ] - start
+
+                    bins = range(0, math.floor((end - start) / 1) * spontbin + 1, spontbin)
+                    hist, _ = np.histogram(spont_spikes, bins)
+                    spontbins.extend((hist / spontbin).tolist())
+
+                mean_spont = np.mean(spontbins)
+                std_spont = np.std(spontbins, ddof=1)
+
+                all_spont.append({
+                    'File Name': self.filename,
+                    'Neuron': neuron,
+                    'Mean Spont': mean_spont,
+                    'SD Spont': std_spont
+                })
+
+        self.final_df['spont'] = pd.DataFrame(all_spont)
 
     def baseline(self):
+        all_baseline = []
         for neuron in self.neurons:
             baselines = []
-            for key, value in self.trial_times.items():  # for each tastant
-                if 'lxl' in key:  # skip if drylick
+            for key, value in self.trial_times.items():
+                if 'lxl' in key:
                     continue
                 allspikes = []
                 trial_count = len(value)
@@ -155,104 +167,120 @@ class StimuliSignals:
                 allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int(
                     (4 + 2) / 0.1 + 1)))[0]  # create histogram of spikes
                 baselines.append(np.mean(allbins[0:20]) / (0.1 * trial_count))
-            self.all_baseline.append({'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': np.mean(
+            all_baseline.append({'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': np.mean(
                 baselines), 'Baseline STDEV': np.std(baselines, ddof=1)})
-        self.final_df['baseline'] = pd.DataFrame(self.all_baseline)
+        self.final_df['baseline'] = pd.DataFrame(all_baseline)
 
     def chisquareLXL(self):
-        for neuron in self.neurons:
-            LXL_data = {}
-            dryspikes = []
-            # get all spike timestamps around drylick activity, time adjusted around each drylick
-            for i in range(len(self.trial_times[self.drylick+'_lxl'])):
-                dryspikes.extend(self.timestamps[neuron][np.where((self.timestamps[neuron] >= self.trial_times[self.drylick+'_lxl'][i]) & (
-                    self.timestamps[neuron] < (self.trial_times[self.drylick+'_lxl'][i]+0.150)))] - self.trial_times[self.drylick+'_lxl'][i])
-            # number of drylick trial-related neuron spikes
-            ndry = len(dryspikes)
-            dryhist = np.histogram(dryspikes, np.arange(
-                0, 0.150+0.015, 0.015))[0]  # bin the spikes
-            for tastant in self.tastants:  # run chi square
-                lxl_datum = self.LXL(neuron, tastant, self.timestamps[tastant], self.timestamps[neuron], dryhist, ndry, lick_max=0.150,
-                                lick_window=0.015, wil_alpha=0.05, chi_alpha=0.05)
-                self.all_LXL.append(lxl_datum)
+        all_LXL = []
+        bin_edges = np.arange(0, 0.150 + 0.015, 0.015)
 
-        self.final_df['lxl'] = pd.DataFrame(self.all_LXL)
+        for neuron in self.neurons:
+            for tastant in self.tastants:
+                dryspikes = []
+
+                for trial_time in self.trial_times[self.drylick + '_lxl']:
+                    spikes_within_trial = self.timestamps[neuron][
+                        (self.timestamps[neuron] >= trial_time) &
+                        (self.timestamps[neuron] < (trial_time + 0.150))
+                        ]
+                    dryspikes.extend(spikes_within_trial - trial_time)
+
+                ndry = len(dryspikes)
+                dryhist, _ = np.histogram(dryspikes, bin_edges)
+                lxl_datum = self.LXL(
+                    neuron, tastant, self.timestamps[tastant], self.timestamps[neuron],
+                    dryhist, ndry, lick_max=0.150, lick_window=0.015,
+                    wil_alpha=0.05, chi_alpha=0.05
+                )
+                all_LXL.append(lxl_datum)
+
+        self.final_df['lxl'] = pd.DataFrame(all_LXL)
 
     def changepoint(self):
-        file_5L = pd.DataFrame(columns=['File', 'Neuron', 'Stimulus', 'Trial Count', 'Baseline', 'Magnitude',
-                                        'Adj. Magnitude', 'Latency', 'Duration', 'CP1', 'CP2', 'CP3', 'CP4', 'Init CPA',
-                                        'eff. alpha', 'pen'])
+        def process_changepoints(changepoints):
+            change_times = (np.asarray(changepoints[:-1]) - 20) / 10
+            close_to_zero = np.where((change_times < 0) & (change_times >= -0.3))[0]
+            not_too_close = np.where((change_times >= 0) & (change_times < 0.3))[0]
+
+            if close_to_zero.size > 0 and not_too_close.size == 0:
+                changepoints[close_to_zero] = 20
+                change_times[close_to_zero] = 0
+
+            valid_indices = np.where(change_times >= 0)
+            return change_times[valid_indices], changepoints[valid_indices]
+
+        def get_response_stats(allbins, changepoints, change_times):
+
+            if len(change_times) == 1 and change_times[0] > 3.5 or len(change_times) == 0:
+                self.all_responses['5L'] = False
+                return None, None, None, None
+
+            if len(change_times) == 1:
+                self.all_responses['5L'] = True
+                respbins = allbins[changepoints[0]:]
+                duration = 4 - change_times[0]
+            else:
+                self.all_responses['5L'] = True
+                respbins = allbins[changepoints[0]:changepoints[1]]
+                duration = change_times[1] - change_times[0]
+
+            magnitude = np.mean(respbins) / (0.1 * trial_count)
+            adj_magnitude = magnitude - baseline
+            latency = change_times[0]
+
+            return magnitude, adj_magnitude, latency, duration
+
+        columns = ['File', 'Neuron', 'Stimulus', 'Trial Count', 'Baseline', 'Magnitude',
+                   'Adj. Magnitude', 'Latency', 'Duration', 'CP1', 'CP2', 'CP3', 'CP4', 'Init CPA',
+                   'eff. alpha', 'pen']
+        file_5L = pd.DataFrame(columns=columns)
 
         for neuron in self.neurons:
-            # get penalty value for this neuron
-            bootpen, eff_a =  self.get_5L_penalty(
-                self.timestamps[neuron], 1000, 0.05, 0.005)
-            print('Effective 5-Lick alpha for {} is {}.'.format(neuron, eff_a))
-            for key, value in self.trial_times.items():  # for each tastant
-                if 'lxl' in key:  # skip if drylick
-                    continue
-                allspikes = []
+            bootpen, eff_a = self.get_5L_penalty(self.timestamps[neuron], 1000, 0.05, 0.005)
+            self.cp_storage.append([neuron,bootpen, eff_a])
+            print(f'Effective 5-Lick alpha for {neuron} is {eff_a}.')
+            trial_times = {
+                key: value for key, value in self.trial_times.items() if 'lxl' not in key
+            }
+
+            for key, value in trial_times.items():
                 trial_count = len(value)
-                for trial_time in value:  # for each trial, get spikes centered around trial time
-                    allspikes.extend((self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - 2) & (
-                            self.timestamps[neuron] < trial_time + 4))] - trial_time).tolist())
-                allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int(
-                    (4 + 2) / 0.01 + 1)))[0]  # create histogram of spikes
-                algo = rpt.Pelt(model='l1', min_size=3, jump=1).fit(
-                    allbins)  # fit changepoint model
-                # predict changepoints based on calculated penalty value
-                changepoints = algo.predict(pen=bootpen)
-                changepoints = np.array(changepoints)
-                # get change times (in seconds relative to stimulus onset)
-                change_times = (np.asarray(changepoints[:-1]) - 20) / 10
-                init = np.copy(change_times)
-                # check if any changepoints were close to 0 (in the negative) and
-                # moving it to 0 would not put it too close to another
-                if np.any((change_times < 0) & (change_times >= -0.3)) and \
-                        not np.any((change_times >= 0) & (change_times < 0.3)):
-                    changepoints[np.where((change_times < 0) & (change_times > -0.3))[0]] = 20
-                    change_times[np.where((change_times < 0) & (change_times > -0.3))[0]] = 0
-                changepoints = np.delete(changepoints, np.where(change_times < 0)[0])[:-1]
-                change_times = np.delete(change_times, np.where(change_times < 0)[0])
+                allspikes = [spike - trial_time for trial_time in value for spike in self.timestamps[neuron]
+                             if trial_time - 2 < spike < trial_time + 4]
+                allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int((4 + 2) / 0.1 + 1)))[0]
+
+                algo = rpt.Pelt(model='l1', min_size=3, jump=1).fit(allbins)
+                changepoints = np.array(algo.predict(pen=bootpen))
+                change_times, changepoints = process_changepoints(changepoints)
+
                 baseline = np.mean(allbins[0:20]) / (0.1 * trial_count)
+                magnitude, adj_magnitude, latency, duration = get_response_stats(allbins, changepoints, change_times)
                 this_5L = {'File': self.filename,
                            'Neuron': neuron,
                            'Stimulus': key,
                            'Trial Count': trial_count,
                            'Baseline': baseline,
-                           'Magnitude': 'nan',
-                           'Adj. Magnitude': 'nan',
-                           'Latency': 'nan',
-                           'Duration': 'nan',
+                           'Magnitude': magnitude,
+                           'Adj. Magnitude': adj_magnitude,
+                           'Latency': latency,
+                           'Duration': duration,
                            'CP1': 'nan',
                            'CP2': 'nan',
                            'CP3': 'nan',
                            'CP4': 'nan',
-                           'Init CPA': init,
+                           'Init CPA': change_times,
                            'eff alpha': eff_a,
-                           'pen': bootpen}
-                # If there was a response
-                if not (len(change_times) == 1 and change_times[0] > 3.5 or len(change_times) == 0):
-                    if len(change_times) == 1:  # for one change point
-                        respbins = allbins[changepoints[0]:]
-                        this_5L['Duration'] = 4 - change_times[0]
-                    else:  # for multiple change points
-                        respbins = allbins[changepoints[0]:changepoints[1]]
-                        this_5L['Duration'] = change_times[1] - change_times[0]
-                    # getting the rest of the stats
-                    this_5L['Magnitude'] = np.mean(respbins) / (0.1 * trial_count)
-                    this_5L['Adj. Magnitude'] = this_5L['Magnitude'] - baseline
-                    this_5L['Latency'] = change_times[0]
-                    this_5L['Trial Count'] = trial_count
-                    for n in range(len(change_times)):
-                        if len(change_times) <= 4:
-                            this_5L['CP' + str(n + 1)] = change_times[n]
-                        else:
-                            this_5L['CP' + str(n + 1)] = '{} change points found'.format(
-                                len(change_times))
+                           'pen': bootpen
+                           }
+                for n in range(len(change_times)):
+                    if len(change_times) <= 4:
+                        this_5L['CP' + str(n + 1)] = change_times[n]
+                    else:
+                        this_5L['CP' + str(n + 1)] = f'{len(change_times)} change points found'
+
                 file_5L = file_5L.append(this_5L, ignore_index=True)
-        self.all_5L.append(file_5L)
-        self.final_df['5L'] = pd.DataFrame(self.all_5L)
+        self.final_df['5L'] = file_5L
 
     def coherence(self):
         binsize, numbin = 1 / (2 * 50), 2 * 256
@@ -286,17 +314,18 @@ class StimuliSignals:
             for i in range(0, len(four) - 3):
                 if np.all(four[i:i + 3] > Z):
                     coherent = True
-            if coherent:  # record coherence data
+            if coherent: # record coherence data
+                self.all_responses['COH'] = True
                 coh_data.loc[len(coh_data)] = [self.filename, neuron, max(four), max(
                     six), max(ten), np.mean(four), np.mean(six), np.mean(ten)]
             else:  # if not coherent, nan
                 coh_data = coh_data.append(
                     [pd.Series(dtype='float64')], ignore_index=True)
                 coh_data.loc[len(coh_data) - 1, 0:2] = [self.filename, neuron]
-        self.all_COH.append(coh_data)
-        # self.final_df['COH'] = pd.DataFrame(self.all_COH)
+        self.final_df['COH'] = pd.DataFrame(coh_data)
 
     def ili(self):
+        all_ILIs = []
         ILIs = {}
         for tastant in self.tastants:  # if all trials are 5 licks, this will be skipped
             while len(self.timestamps[tastant]) / 5 > len(self.trial_times[tastant]):
@@ -334,7 +363,7 @@ class StimuliSignals:
             tasteILI = np.delete(tasteILI, ILIbreaks)
             ILIs[tastant] = {'intervals': tasteILI, 'trialcount': len(
                 self.trial_times[tastant]), '5L durations': time5L}  # package ILI info
-        self.all_ILI.append(ILIs)
+        all_ILIs.append(ILIs)
 
         allILIdata = pd.DataFrame(index=self.tastants,
                                   columns=['Median ILI', 'Pause Count', 'Mean Pause Length', 'Mean Pause Length SEM',
@@ -345,7 +374,7 @@ class StimuliSignals:
             tastant_ILIs = []
             tastant_5L_times = []
             trial_count = 0
-            for fileili in self.all_ILI:  # compile ILI info across all sessions
+            for fileili in all_ILIs:  # compile ILI info across all sessions
                 tastant_ILIs.extend(fileili[tastant]['intervals'])
                 tastant_5L_times.extend(fileili[tastant]['5L durations'])
                 trial_count += fileili[tastant]['trialcount']
@@ -364,6 +393,10 @@ class StimuliSignals:
     def get_5L_penalty(self, neur, bootstrap_n=1000,
                        boot_alpha=.05, alpha_tol=.005):
         """Obtain penalty value for us in change-point calculation."""
+        base = 2  # time before trial start to include in histogram
+        trial_end = 5  # time after trial start to include in histogram
+        bin5L = 0.1  # bin size for histogram
+        model = 'l1'  # model for change-point calculation
         bootbins = []
         for key, value in self.trial_times.items():  # for each tastant
             if 'lxl' in key:  # skip if drylick
@@ -372,9 +405,9 @@ class StimuliSignals:
             # for each trial, collect the spikes, normalized for trial time
             for trial_time in value:
                 allspikes.extend((neur[np.where(
-                    (neur > trial_time - 2) & (neur < trial_time + 4))] - trial_time).tolist())
+                    (neur > trial_time - base) & (neur < trial_time + trial_end))] - trial_time).tolist())
             # create histogram of spikes
-            allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int((4 + 2) / 0.1 + 1)))[0]
+            allbins = np.histogram(allspikes, np.linspace(-base, trial_end, num=int((trial_end + base) / bin5L + 1)))[0]
             bootbins.extend(allbins)  # add the bins to the list for bootstrapping
         random.seed(a=34)  # set random seed
         bootpen = 1
@@ -385,7 +418,7 @@ class StimuliSignals:
         # Get bootstrap_n number of fitted models
         # for a random sample of bins from the data
         for i in range(bootstrap_n):
-            pelts.append(rpt.Pelt(model='l1', min_size=3, jump=1).fit(
+            pelts.append(rpt.Pelt(model=model, min_size=3, jump=1).fit(
                 np.array(random.sample(bootbins, k=len(allbins)))))
         # loop will continue if the effective alpha has not reached desired alpha
         while eff_a > boot_alpha:
@@ -408,8 +441,10 @@ class StimuliSignals:
                 fp = old_fp
                 eff_a = old_a
             else:
-                old_bootpen = bootpen  # save old bootpen in case the new one overshoots
-                bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a # increase the penalty value
+                # save old bootpen in case the new one overshoots
+                old_bootpen = bootpen
+                # increase the penalty value
+                bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a
         return bootpen, eff_a
 
     def LXL(self, neuron, tastant, stim, neur, dryhist, ndry, lick_max=.150,

@@ -33,7 +33,6 @@ class EatingSignals:
 
     def build_neuron_df(self):
         results = []
-
         # Loop through each neuron and its timestamps
         for neuron, timestamps in self.neurons.items():
             # Loop through each row in the events_df
@@ -68,7 +67,6 @@ class EatingSignals:
                 }, ignore_index=True)
 
         return final_results_df
-
 
     def update_mean_and_sem_dataframes(self, final_results_df):
         unique_neurons = np.unique(final_results_df['neuron'])

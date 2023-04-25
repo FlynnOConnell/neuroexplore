@@ -35,17 +35,20 @@ class Params:
             self.stats_columns = ['Spont'] + self.well_events + self.eating_events
             self.df_cols = ['animal', 'date'] + self.stats_columns + self.stats_columns
 
-            self.tastants = (
-                        'T1_A1',
-                        'T1_AS1',
-                        'T1_M1',
-                        'T1_N1',
-                        'T1_Q1',
-                        'T1_S1'
+            self.tastants_opts = (
+                        'T2_Citric_Acid',
+                        'T2_ArtSal',
+                        'T2_MSG',
+                        'T2_NaCl',
+                        'T2_Quinine',
+                        'T2_Sucrose',
+                        'Citric_Acid',
+                        'ArtSal',
+                        'MSG',
+                        'NaCl',
+                        'Quinine',
+                        'Sucrose',
                         )
-
-            self.colors = ('Blue', 'Yellow', 'Purple', 'Green', 'Violet', 'Orange')
-
 
 
 

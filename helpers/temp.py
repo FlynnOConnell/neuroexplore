@@ -1,196 +1,77 @@
+def changepoint(self):
+    file_5L = pd.DataFrame(columns=['File', 'Neuron', 'Stimulus', 'Trial Count', 'Baseline', 'Magnitude',
+                                    'Adj. Magnitude', 'Latency', 'Duration', 'CP1', 'CP2', 'CP3', 'CP4', 'Init CPA',
+                                    'eff. alpha', 'pen'])
 
-# %% PLOT TRIALS -----------------------------------------------------------------
-
-# x=0
-# well_times, eating_times, spont_times = [], [], []
-# df1 = pd.DataFrame(columns=['isi', 'mid'])
-# for df, wt, et, st in data.generate_trials_loose():
-#
-#     plot.isi_histogram(df.neuron, df.color)
-#     plot.trial_histogram(df)
-#     avg, std = calculate_window_stats(np.diff(df.neuron))
-#     fig, ax = plt.subplots()
-#     ax.plot(df.reset_index(drop=True).index[:-1], std, color='black')
-#     ax.set_title("St. Dev. of Sequential ISIs \n"
-#                  "(sliding window of 10 intervals)", fontweight='bold')
-#     ax.set_xlabel("ISI number", fontweight='bold')
-#     ax.set_ylabel("st. dev. (# of spikes)", fontweight='bold')
-#     ax.set_frame_on(False)
-#     ax.axvspan(
-#         et[0],
-#         et[-1],
-#         alpha=0.05,
-#         color='red'
-#     )
-#     ax.axvspan(
-#         wt[0],
-#         wt[-1],
-#         alpha=0.05,
-#         color='blue'
-#     )
-#     if st.size > 0:
-#         ax.axvspan(
-#             st[0],
-#             st[-1],
-#             alpha=0.05,
-#             color='gray'
-#         )
-#     plt.tight_layout()
-#     plt.show()
-
-# %% PLOT ISI'S FOR ALL TRIALS ------------------------------------------------
-
-# isi = np.diff(df_e.neuron)
-# bins = np.arange(-.005, 0.2, 0.001)
-# counts, _ = np.histogram(isi, bins)
-# prob = counts / len(isi)
-# fig, ax = plt.subplots()
-# ax.bar(bins[:-1], prob, width=1e-3)
-# ax.set_xlabel("ISI [s]")
-# ax.set_ylabel("Frequency", fontweight='bold')
-# ax.set_frame_on(False)
-# plt.tight_layout()
-# plt.show()
-# for event, trial in data_trials.items():
-#     if trial:
-#         for trial_num, this_trial_df in data_trials[event].items():
-#         # data_trials[event][trial]
-#             single_histo(this_trial_df, 0)
-
-# df_all_ev = pd.concat([df_spont, df_all_e, df_all_w], axis=0)
-# df_all_ev = df_all_ev.drop('mid', axis=1).reset_index(drop=True)
-# df_all_ev = df_all_ev.reset_index(drop=True)
-#
-# fig, ax = plt.subplots()
-# ax.bar(df_all_ev.index, gaussian_filter(df_all_ev.counts, sigma=2), width=0.1, color=df_all_ev.color)
-# ax.set_title("Everything", fontweight='bold')
-# ax.axes.get_xaxis().set_visible(False)
-# ax.set_ylabel("Frequency (hz)", fontweight='bold')
-# ax.set_frame_on(False)
-# # plt.tight_layout()
-# plt.savefig(r'C:\Users\Flynn\Dropbox\Lab\fig')
-
-# %% DATA TO MATLAB ----------------------------------------------------------
-
-# final = {}
-#
-# for k, v in spike_times_dict.items(): # k = e_BR, v = {3: array, 4: array}
-#     for outer, inner in v.items(): # outer = 3, inner = array
-#         for k2, v2 in inner.items():
-#
-#         mat_structs.__setattr__(outer, inner)
-#     final[k] = mat_structs
-#
-
-# scipy.io.savemat(savepath + 'from_python.mat', final)
-
-
-from __future__ import annotations
-import warnings
-from collections import namedtuple
-import numpy as np
-import scipy.stats as stats
-import pandas as pd
-from params import Params
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
-class EatingSignals:
-    def __init__(self, nexdata: dict) -> None:
-        self.nex = nexdata
-        self.ensemble = False
-        self.params = Params()
-        self.neurons: dict = {}
-        self.neurostamps = []
-        self.intervals = {}
-        self.__populate()
-        self.intervals_df = self.build_intervals_df()
-
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self.nex["Header"]["Filename"]})'
-
-    def build_intervals_df(self):
-        for neuron, timestamps in self.neurons.items():
-            neur = pd.DataFrame()
-            intervals_df = self.get_intervals_df()
-            intervals_df['relative_timestamps'] = intervals_df.apply(
-                self.get_relative_timestamps, axis=1, neuron_df=self.__neuron_df)
-            intervals_df['binned_spike_rates'] = intervals_df['relative_timestamps'].apply(
-                self.bin_spikes, bin_size=self.params.binsize)
-            intervals_df['num_spikes'] = intervals_df['relative_timestamps'].apply(len)
-            intervals_df['duration'] = intervals_df['end_time'] - intervals_df['start_time']
-            intervals_df = intervals_df[intervals_df['duration'] >= 1]
-            intervals_df['mean_spike_rate'] = intervals_df['binned_spike_rates'].apply(np.mean)
-            intervals_df['sem_spike_rate'] = intervals_df['binned_spike_rates'].apply(stats.sem)
-        return intervals_df
-
-    @property
-    def final_stats(self):
-        file_stats = self.intervals_df.groupby('event')['mean_spike_rate'].agg(['mean', 'sem']).reset_index()
-        file_stats.columns = ['event', 'mean', 'sem']
-        file_stats = file_stats.T
-        cols = file_stats.iloc[0, :]
-        file_stats = file_stats.iloc[1:, :]
-        file_stats.columns = cols
-        file_stats = self.reorder_stats_columns(file_stats)
-        return file_stats
-
-    @property
-    def means(self):
-        return self.final_stats.iloc[0, :]
-
-    @property
-    def sems(self):
-        return self.final_stats.iloc[1, :]
-
-    def reorder_stats_columns(self, df):
-        existing_cols = [col for col in self.params.order if col in df.columns]
-        remaining_cols = [col for col in df.columns if col not in existing_cols]
-        new_cols = existing_cols + remaining_cols
-        return df[new_cols]
-
-    def __populate(self):
-        count = 0
-        for var in self.nex['Variables']:
-            if var['Header']['Type'] == 2:
-                self.intervals[var['Header']['Name']] = var['Intervals']
-            if var['Header']['Type'] == 0:
-                self.neurons[[var['Header']['Name']][0]] = var['Timestamps']
-                self.neurostamps = var['Timestamps']
-                self.__neuron_df = pd.DataFrame({'timestamp': self.neurostamps})
-                count += 1
-        self.ensemble = True if count > 1 else False
-
-    def get_intervals_df(self):
-        intervals_list = []
-        for event, (start_times, end_times) in self.intervals.items():
-            if event not in ['AllFile', 'nospo']:
-                for start, end in zip(start_times, end_times):
-                    intervals_list.append({'event': event, 'start_time': start, 'end_time': end})
-        return pd.DataFrame(intervals_list)
-
-    @staticmethod
-    def bin_spikes(relative_timestamps, bin_size=1):
-        if hasattr(relative_timestamps, 'size') and relative_timestamps.size == 0:
-            return []
-
-        max_time = max(relative_timestamps)
-        num_bins = int(np.ceil(max_time / bin_size))
-        binned_spike_counts = np.zeros(num_bins)
-
-        for spike_time in relative_timestamps:
-            bin_index = int(spike_time // bin_size)
-            binned_spike_counts[bin_index] += 1
-
-        binned_spike_rates = binned_spike_counts / bin_size
-        return binned_spike_rates.tolist()
-
-    @staticmethod
-    def get_relative_timestamps(row, neuron_df):
-        start = row['start_time']
-        end = row['end_time']
-
-        mask = (neuron_df['timestamp'] >= start) & (neuron_df['timestamp'] <= end)
-        event_neurons = neuron_df[mask]['timestamp'] - start
-        relative_timestamps = event_neurons.to_list()
-        return np.asarray(relative_timestamps)
-
+    for neuron in self.neurons:
+        # get penalty value for this neuron
+        bootpen, eff_a = self.get_5L_penalty(
+            self.timestamps[neuron], 1000, 0.05, 0.005)
+        print('Effective 5-Lick alpha for {} is {}.'.format(neuron, eff_a))
+        for key, value in self.trial_times.items():  # for each tastant
+            if 'lxl' in key:  # skip if drylick
+                continue
+            allspikes = []
+            trial_count = len(value)
+            for trial_time in value:  # for each trial, get spikes centered around trial time
+                allspikes.extend((self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - 2) & (
+                        self.timestamps[neuron] < trial_time + 4))] - trial_time).tolist())
+            allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int(
+                (4 + 2) / 0.01 + 1)))[0]  # create histogram of spikes
+            algo = rpt.Pelt(model='l1', min_size=3, jump=1).fit(
+                allbins)  # fit changepoint model
+            # predict changepoints based on calculated penalty value
+            changepoints = algo.predict(pen=bootpen)
+            changepoints = np.array(changepoints)
+            # get change times (in seconds relative to stimulus onset)
+            change_times = (np.asarray(changepoints[:-1]) - 20) / 10
+            init = np.copy(change_times)
+            # check if any changepoints were close to 0 (in the negative) and
+            # moving it to 0 would not put it too close to another
+            if np.any((change_times < 0) & (change_times >= -0.3)) and \
+                    not np.any((change_times >= 0) & (change_times < 0.3)):
+                changepoints[np.where((change_times < 0) & (change_times > -0.3))[0]] = 20
+                change_times[np.where((change_times < 0) & (change_times > -0.3))[0]] = 0
+            changepoints = np.delete(changepoints, np.where(change_times < 0)[0])[:-1]
+            change_times = np.delete(change_times, np.where(change_times < 0)[0])
+            baseline = np.mean(allbins[0:20]) / (0.1 * trial_count)
+            this_5L = {'File': self.filename,
+                       'Neuron': neuron,
+                       'Stimulus': key,
+                       'Trial Count': trial_count,
+                       'Baseline': baseline,
+                       'Magnitude': 'nan',
+                       'Adj. Magnitude': 'nan',
+                       'Latency': 'nan',
+                       'Duration': 'nan',
+                       'CP1': 'nan',
+                       'CP2': 'nan',
+                       'CP3': 'nan',
+                       'CP4': 'nan',
+                       'Init CPA': init,
+                       'eff alpha': eff_a,
+                       'pen': bootpen
+                       }
+            # If there was a response
+            if not (len(change_times) == 1 and change_times[0] > 3.5 or len(change_times) == 0):
+                self.all_responses['5L'] = True
+                if len(change_times) == 1:  # for one change point
+                    respbins = allbins[changepoints[0]:]
+                    this_5L['Duration'] = 4 - change_times[0]
+                else:  # for multiple change points
+                    respbins = allbins[changepoints[0]:changepoints[1]]
+                    this_5L['Duration'] = change_times[1] - change_times[0]
+                # getting the rest of the stats
+                this_5L['Magnitude'] = np.mean(respbins) / (0.1 * trial_count)
+                this_5L['Adj. Magnitude'] = this_5L['Magnitude'] - baseline
+                this_5L['Latency'] = change_times[0]
+                this_5L['Trial Count'] = trial_count
+                for n in range(len(change_times)):
+                    if len(change_times) <= 4:
+                        this_5L['CP' + str(n + 1)] = change_times[n]
+                    else:
+                        this_5L['CP' + str(n + 1)] = '{} change points found'.format(
+                            len(change_times))
+            file_5L = file_5L.append(this_5L, ignore_index=True)
+    self.all_5L.append(file_5L)
+    self.final_df['5L'] = pd.DataFrame(self.all_5L)

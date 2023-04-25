@@ -1,6 +1,8 @@
 from pathlib import Path
 from collections import namedtuple
 import numpy as np
+import sys
+import traceback
 import pandas as pd
 from .file_handling import find_matching_files, parse_filename, get_nex
 from . import signals_food as sf
@@ -9,7 +11,6 @@ from params import Params
 
 class DataCollection:
     def __init__(self, directory: str | Path = ''):
-        self.SignalData = None
         self.params = Params()
         self.stats = None
         self.info_df = pd.DataFrame(columns=['animal', 'date', '#timestamps'])
@@ -24,7 +25,7 @@ class DataCollection:
         self.files = {paradigm: [] for paradigm in self.data_files if paradigm in ['sf', 'rs']}
         self.errors = {}
 
-    def get_data(self, paradigm='sf', num_files=None):
+    def get_data(self, paradigm='sf', num_files=None, functions_to_run=None,):
         if paradigm not in self.data_files:
             raise ValueError(f'Paradigm {paradigm} not found.')
         if num_files:
@@ -36,11 +37,16 @@ class DataCollection:
                     data = sf.EatingSignals(nexfile)
                 elif paradigm == 'rs':
                     data = ss.StimuliSignals(nexfile, file)
+                    if functions_to_run:
+                        data.run_stats(functions_to_run)
                 else:
                     raise ValueError(f'Paradigm {paradigm} not found.')
                 self.files[paradigm].append({file: data})
             except Exception as e:
-                self.errors[file] = e
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                tb_lines = ''.join(tb_str)
+                self.errors[file] = f"{e}\n{tb_lines}"
 
     @staticmethod
     def concat_dataframe_to_dataframe(df1, df2):
@@ -70,6 +76,19 @@ class DataCollection:
         return updated_df
 
     def get_stats(self, paradigm='sf'):
+        for file in self.files[paradigm]:
+            for filename, data in file.items():
+                session_info = parse_filename(filename)
+                session = [session_info.animal, session_info.date]
+                for neuron in data.neurons:
+                    self.info_df.loc[len(self.info_df)] = session + [data.num_ts[neuron]]
+                self.means_df = self.concat_dataframe_to_dataframe(self.means_df, data.means)
+                self.sems_df = self.concat_dataframe_to_dataframe(self.sems_df, data.sems)
+                if self.means_df.shape != self.sems_df.shape:
+                    raise ValueError('Means and SEMs dataframes are not the same size.')
+        self.stats = pd.concat([self.info_df, self.means_df, self.sems_df], axis=1)
+
+    def get_rs(self, paradigm='rs'):
         for file in self.files[paradigm]:
             for filename, data in file.items():
                 session_info = parse_filename(filename)
