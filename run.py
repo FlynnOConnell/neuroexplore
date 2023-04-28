@@ -2,6 +2,9 @@ from pathlib import Path
 from data_utils import data_collection
 import pandas as pd
 import pickle
+from data_utils import signals_stimuli as ss
+from data_utils.file_handling import find_matching_files, parse_filename, get_nex
+import os
 
 def output(files):
     from analysis import output
@@ -11,16 +14,21 @@ def output(files):
 
 if __name__ == "__main__":
 
-    datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles')
-    data = data_collection.DataCollection(datadir)
-    new_data = data_collection.DataCollection(datadir)
-    data = data.get_data_file(['SFN08_2018-07-23_RS.nex',
-                                    'SFN08_2018-08-08_RS.nex',
-                                    'SFN10_2018-07-26_RS.nex',
-                                    'SFN13_2018-07-23_RS.nex'
-                                    ], paradigm='rs')
-    for filename, dataset in data.items():
-        dataset.run_stats(['all'])
+    datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs\replacements')
+    # data = data_collection.DataCollection(datadir)
+    # new_data = data_collection.DataCollection(datadir)
+    # data = data.get_data(paradigm='replacements', functions_to_run=['all'])
+
+    files = find_matching_files(datadir, '*.nex*')
+    allfile = []
+    for file in files['replacements']:
+        session = parse_filename(file)
+        nex = get_nex(os.path.join(datadir, file))
+        data = ss.StimuliSignals(nex, file)
+        data.run_stats(['all'])
+        allfile.append({session: data})
+    data1 = [file[session] for file in allfile for session in file.keys()]
+
     final_five = pd.DataFrame()
     final_fives = []
     final_coh = pd.DataFrame()
@@ -35,13 +43,14 @@ if __name__ == "__main__":
     final_bls = []
 
     x = 0
-    for session, stats in data.items():
-        final_fives.append(stats.final_df['5L'])
-        final_cohs.append(stats.final_df['COH'])
-        final_lxls.append(stats.final_df['lxl'])
-        final_sponts.append(stats.final_df['baseline'])
-        final_ilis.append(stats.final_df['spont'])
-        final_bls.append(stats.final_df['ILI'])
+    for diction in data1:
+        for num, stats in diction.items():
+            final_fives.append(stats.final_df['5L'])
+            final_cohs.append(stats.final_df['COH'])
+            final_lxls.append(stats.final_df['lxl'])
+            final_sponts.append(stats.final_df['baseline'])
+            final_ilis.append(stats.final_df['spont'])
+            final_bls.append(stats.final_df['ILI'])
 
     df_fivelick = pd.concat([final_five] + final_fives, axis=0, ignore_index=True)
     df_coh = pd.concat([final_coh] + final_cohs, axis=0, ignore_index=True)
@@ -50,7 +59,7 @@ if __name__ == "__main__":
     df_ili = pd.concat([final_ili] + final_ilis, axis=0, ignore_index=True)
     df_bl = pd.concat([final_bl] + final_bls, axis=0, ignore_index=True)
 
-    save = r'C:\Users\Flynn\OneDrive\Desktop\temp\rs_output_final2.xlsx'
+    save = r'C:\Users\Flynn\OneDrive\Desktop\temp\rs_output_final3.xlsx'
     with pd.ExcelWriter(save) as writer:
         df_fivelick.to_excel(writer, sheet_name='5L', index=False)
         df_coh.to_excel(writer, sheet_name='COH', index=False)

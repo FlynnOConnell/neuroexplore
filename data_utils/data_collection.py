@@ -21,7 +21,7 @@ class DataCollection:
         else:
             self.directory = Path(directory)
         self.data_files = find_matching_files(self.directory, '*.nex*')
-        self.files = {paradigm: [] for paradigm in self.data_files if paradigm in ['sf', 'rs']}
+        self.files = {paradigm: [] for paradigm in self.data_files if paradigm in ['sf', 'rs', 'replacements']}
         self.errors = {}
 
     def get_data(self, paradigm='sf', num_files=None, functions_to_run=None,):
@@ -34,7 +34,7 @@ class DataCollection:
                 nexfile = get_nex(self.directory / paradigm / file)
                 if paradigm == 'sf':
                     data = sf.EatingSignals(nexfile)
-                elif paradigm == 'rs':
+                elif paradigm in ['rs', 'replacements']:
                     data = ss.StimuliSignals(nexfile, file)
                     if functions_to_run:
                         data.run_stats(functions_to_run)
