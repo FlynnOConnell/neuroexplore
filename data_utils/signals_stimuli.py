@@ -16,10 +16,6 @@ class StimuliSignals:
     def __init__(self, nexdata: dict, filename: str) -> None:
         self.nex = nexdata
         self.filename = filename
-        self.cp_storage = []
-        self.notes = {self.filename: []}
-        self.all_responses = {}
-
         self.ensemble = False
         self.params = Params()
         self.lick = 'Lick'
@@ -31,10 +27,11 @@ class StimuliSignals:
         self.neurons = ()
         self.trial_times = {}
         self.drylick_trials = []
-        self.tastants = None
+        self.tastants = self.params.tastants_opts
         self.drylick = 'drylick'
         self.final_df = {}
         self.__populate()
+        self.all_responses = {neuron: {'LXL': False, 'COH': 'not run', '5L': False} for neuron in self.neurons}
 
     def __repr__(self) -> str:
         ens = '-E' if self.ensemble else ''
@@ -63,7 +60,6 @@ class StimuliSignals:
                 count += 1
 
         self.ensemble = count > 1
-        self.tastants = tuple(event for event in self.all_events if event in self.timestamps.keys())
         for key, value in self.timestamps.items():
             if max(value) > self.timestamps['Stop'][0]:
                 self.timestamps['Stop'] = np.asarray([max(value)])
@@ -98,12 +94,13 @@ class StimuliSignals:
             self.trial_times[tastant] = np.array(tastant1)
         # remove tastants with too many trials
         self.trial_times = {trial: arr for trial, arr in self.trial_times.items() if arr.size <= 25}
+        self.tastants = [tastant for tastant in self.tastants if tastant in self.trial_times.keys()]
         self.trial_times[self.drylick + '_lxl'] = np.array(self.drylick_trials)
 
     def run_stats(self, functions_to_run):
         """ Runs the functions specified in the functions_to_run list."""
         function_map = {
-            'coherence': self.coherence,
+            'coh': self.coherence,
             'ili': self.ili,
             'spont': self.spont,
             'baseline': self.baseline,
@@ -115,7 +112,7 @@ class StimuliSignals:
             if 'all' in function_name:
                 for func in function_map:
                     function_map[func]()
-            if function_name in function_map:
+            elif function_name in function_map:
                 function_map[function_name]()
             else:
                 print(f"Function '{function_name}' not found.")
@@ -156,17 +153,17 @@ class StimuliSignals:
         all_baseline = []
         for neuron in self.neurons:
             baselines = []
-            for key, value in self.trial_times.items():
-                if 'lxl' in key:
+            for key, value in self.trial_times.items():  # for each tastant
+                if 'lxl' in key:  # skip if drylick
                     continue
                 allspikes = []
                 trial_count = len(value)
                 for trial_time in value:  # for each trial, get spikes centered around trial time
-                    allspikes.extend((self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - 2) & (
-                            self.timestamps[neuron] < trial_time + 4))] - trial_time).tolist())
-                allbins = np.histogram(allspikes, np.linspace(-2, 4, num=int(
-                    (4 + 2) / 0.1 + 1)))[0]  # create histogram of spikes
-                baselines.append(np.mean(allbins[0:20]) / (0.1 * trial_count))
+                    allspikes.extend((self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - self.params.base) & (
+                            self.timestamps[neuron] < trial_time + self.params.trial_end))] - trial_time).tolist())
+                allbins = np.histogram(allspikes, np.linspace(-self.params.base, self.params.trial_end, num=int(
+                    (self.params.trial_end + self.params.base) / self.params.bin5L + 1)))[0]  # create histogram of spikes
+                baselines.append(np.mean(allbins[0:20]) / (self.params.bin5L * trial_count))
             all_baseline.append({'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': np.mean(
                 baselines), 'Baseline STDEV': np.std(baselines, ddof=1)})
         self.final_df['baseline'] = pd.DataFrame(all_baseline)
@@ -176,26 +173,24 @@ class StimuliSignals:
         bin_edges = np.arange(0, 0.150 + 0.015, 0.015)
 
         for neuron in self.neurons:
-            for tastant in self.tastants:
-                dryspikes = []
-
-                for trial_time in self.trial_times[self.drylick + '_lxl']:
-                    spikes_within_trial = self.timestamps[neuron][
-                        (self.timestamps[neuron] >= trial_time) &
-                        (self.timestamps[neuron] < (trial_time + 0.150))
-                        ]
-                    dryspikes.extend(spikes_within_trial - trial_time)
-
-                ndry = len(dryspikes)
-                dryhist, _ = np.histogram(dryspikes, bin_edges)
-                lxl_datum = self.LXL(
-                    neuron, tastant, self.timestamps[tastant], self.timestamps[neuron],
-                    dryhist, ndry, lick_max=0.150, lick_window=0.015,
-                    wil_alpha=0.05, chi_alpha=0.05
-                )
+            LXL_data = {}
+            dryspikes = []
+            # get all spike timestamps around drylick activity, time adjusted around each drylick
+            for i in range(len(self.trial_times[self.drylick + '_lxl'])):
+                dryspikes.extend(
+                    self.timestamps[neuron][np.where((self.timestamps[neuron] >= self.trial_times[self.drylick + '_lxl'][i]) & (
+                            self.timestamps[neuron] < (self.trial_times[self.drylick + '_lxl'][i] + self.params.lick_max)))] -
+                    self.trial_times[self.drylick + '_lxl'][i])
+            # number of drylick trial-related neuron spikes
+            ndry = len(dryspikes)
+            dryhist = np.histogram(dryspikes, np.arange(
+                0, self.params.lick_max + self.params.lick_window, self.params.lick_window))[0]  # bin the spikes
+            for tastant in self.tastants:  # run chi square
+                lxl_datum = self.LXL(neuron, tastant, self.timestamps[tastant], self.timestamps[neuron], dryhist, ndry, lick_max=self.params.lick_max,
+                                lick_window=self.params.lick_window, wil_alpha=self.params.wil_alpha, chi_alpha=self.params.chi_alpha)
                 all_LXL.append(lxl_datum)
-
         self.final_df['lxl'] = pd.DataFrame(all_LXL)
+        xxx = 5
 
     def changepoint(self):
         def process_changepoints(changepoints):
@@ -209,19 +204,16 @@ class StimuliSignals:
 
             valid_indices = np.where(change_times >= 0)
             return change_times[valid_indices], changepoints[valid_indices]
-
-        def get_response_stats(allbins, changepoints, change_times):
-
+        def get_response_stats(neuron, allbins, changepoints, change_times):
             if len(change_times) == 1 and change_times[0] > 3.5 or len(change_times) == 0:
-                self.all_responses['5L'] = False
-                return None, None, None, None
+                return 'None', 'None', 'None', 'None'
 
             if len(change_times) == 1:
-                self.all_responses['5L'] = True
+                self.all_responses[neuron]['5L'] = True
                 respbins = allbins[changepoints[0]:]
                 duration = 4 - change_times[0]
             else:
-                self.all_responses['5L'] = True
+                self.all_responses[neuron]['5L'] = True
                 respbins = allbins[changepoints[0]:changepoints[1]]
                 duration = change_times[1] - change_times[0]
 
@@ -238,7 +230,6 @@ class StimuliSignals:
 
         for neuron in self.neurons:
             bootpen, eff_a = self.get_5L_penalty(self.timestamps[neuron], 1000, 0.05, 0.005)
-            self.cp_storage.append([neuron,bootpen, eff_a])
             print(f'Effective 5-Lick alpha for {neuron} is {eff_a}.')
             trial_times = {
                 key: value for key, value in self.trial_times.items() if 'lxl' not in key
@@ -253,9 +244,9 @@ class StimuliSignals:
                 algo = rpt.Pelt(model='l1', min_size=3, jump=1).fit(allbins)
                 changepoints = np.array(algo.predict(pen=bootpen))
                 change_times, changepoints = process_changepoints(changepoints)
-
+                init = np.copy(change_times)
                 baseline = np.mean(allbins[0:20]) / (0.1 * trial_count)
-                magnitude, adj_magnitude, latency, duration = get_response_stats(allbins, changepoints, change_times)
+                magnitude, adj_magnitude, latency, duration = get_response_stats(neuron, allbins, changepoints, change_times)
                 this_5L = {'File': self.filename,
                            'Neuron': neuron,
                            'Stimulus': key,
@@ -269,7 +260,7 @@ class StimuliSignals:
                            'CP2': 'nan',
                            'CP3': 'nan',
                            'CP4': 'nan',
-                           'Init CPA': change_times,
+                           'Init CPA': init,
                            'eff alpha': eff_a,
                            'pen': bootpen
                            }
@@ -278,7 +269,6 @@ class StimuliSignals:
                         this_5L['CP' + str(n + 1)] = change_times[n]
                     else:
                         this_5L['CP' + str(n + 1)] = f'{len(change_times)} change points found'
-
                 file_5L = file_5L.append(this_5L, ignore_index=True)
         self.final_df['5L'] = file_5L
 
@@ -288,7 +278,7 @@ class StimuliSignals:
                                          'coh peak (10-15Hz)', 'coh mean (4-9)', 'coh mean (6-8)', 'coh mean (10-15)'])
         # bin size and number of bins per segment
         lick_bin = np.histogram(self.timestamps[self.lick], np.arange(
-            self.timestamps['Start'], self.timestamps['Stop'], self.params.binsize))[0]  # binning licks
+            self.timestamps['Start'], self.timestamps['Stop'], binsize))[0]  # binning licks
         # see Kattla S, Lowery MM. for the following section
         L = len(lick_bin) / numbin
         Lstar = math.floor((L - 1) / (1 - .5)) + 1
@@ -305,7 +295,7 @@ class StimuliSignals:
             cell_bin = np.histogram(self.timestamps[neuron], np.arange(self.timestamps['Start'], self.timestamps['Stop'], binsize))[0]
 
             f, Cxy = signal.coherence(lick_bin, cell_bin, fs=1 / binsize, nperseg=numbin,
-                                      window='hann', detrend=False, noverlap=int(numbin / 2))
+                                      window='hann', detrend=False, noverlap=numbin / 2)
             # get coherence ranges
             four, six, ten = Cxy[np.where((f > 4) & (f < 9))], Cxy[np.where(
                 (f > 6) & (f < 8))], Cxy[np.where((f > 10) & (f < 15))]
@@ -315,10 +305,11 @@ class StimuliSignals:
                 if np.all(four[i:i + 3] > Z):
                     coherent = True
             if coherent: # record coherence data
-                self.all_responses['COH'] = True
+                self.all_responses[neuron]['COH'] = True
                 coh_data.loc[len(coh_data)] = [self.filename, neuron, max(four), max(
                     six), max(ten), np.mean(four), np.mean(six), np.mean(ten)]
             else:  # if not coherent, nan
+                self.all_responses[neuron]['COH'] = False
                 coh_data = coh_data.append(
                     [pd.Series(dtype='float64')], ignore_index=True)
                 coh_data.loc[len(coh_data) - 1, 0:2] = [self.filename, neuron]
@@ -390,8 +381,7 @@ class StimuliSignals:
         self.final_df['ILI'] = pd.DataFrame.from_dict(
             {key: pd.Series(value) for key, value in allILIdata.items()})
 
-    def get_5L_penalty(self, neur, bootstrap_n=1000,
-                       boot_alpha=.05, alpha_tol=.005):
+    def get_5L_penalty(self, neur, bootstrap_n=1000, boot_alpha=.05, alpha_tol=.005):
         """Obtain penalty value for us in change-point calculation."""
         base = 2  # time before trial start to include in histogram
         trial_end = 5  # time after trial start to include in histogram
@@ -447,16 +437,14 @@ class StimuliSignals:
                 bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a
         return bootpen, eff_a
 
-    def LXL(self, neuron, tastant, stim, neur, dryhist, ndry, lick_max=.150,
-            lick_window=.015, wil_alpha=.05, chi_alpha=.05):
+    def LXL(self, neuron, tastant, stim, neur, dryhist, ndry, lick_max=.150, lick_window=.015, wil_alpha=.05, chi_alpha=.05):
         """Run a lick-by-lick taste response calculation."""
-        respmag = None
         tastespikes = []
-        # get all spike self.timestamps around tastant activity,
+        # get all spike timestamps around tastant activity,
         # time adjusted around each tastant lick
         for i in range(len(stim)):
             tastespikes.extend(neur[np.where((neur >= stim[i]) & (neur < (stim[i] + lick_max)))] - stim[i])
-        ntaste = len(tastespikes)
+        ntaste = len(tastespikes)  # number of taste spikes
         tasteobs = np.histogram(tastespikes, np.arange(0, lick_max + lick_window, lick_window))[
             0]  # bin the tastant spikes
         expected = dryhist * ntaste / ndry
@@ -479,8 +467,9 @@ class StimuliSignals:
         else:
             gof_p = 1
         q_value = gof_p * len(self.tastants)  # bonferroni correction
-
+        # if the chi square is significant, record the taste response
         if q_value < chi_alpha:
+            self.all_responses[neuron]['LXL'] = True
             this_LXL = {'File Name': self.filename,
                         'Neuron': neuron,
                         'Tastant': tastant,
@@ -491,6 +480,7 @@ class StimuliSignals:
                         'Wilcoxon_p': pval,
                         'Response_Type': resptype}
         else:
+            self.all_responses[neuron]['LXL'] = False
             this_LXL = {'File Name': self.filename,
                         'Neuron': neuron,
                         'Tastant': tastant,
@@ -523,7 +513,7 @@ class StimuliSignals:
         return fdr_data
 
     @staticmethod
-    def binmerge(self, expected, observed):
+    def binmerge(expected, observed):
         """ Merges bins in the case where bin counts would invalidate chi square. """
         e = np.array(expected)
         o = np.array(observed)

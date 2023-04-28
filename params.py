@@ -36,19 +36,26 @@ class Params:
             self.df_cols = ['animal', 'date'] + self.stats_columns + self.stats_columns
 
             self.tastants_opts = (
-                        'T2_Citric_Acid',
-                        'T2_ArtSal',
-                        'T2_MSG',
-                        'T2_NaCl',
-                        'T2_Quinine',
-                        'T2_Sucrose',
-                        'Citric_Acid',
-                        'ArtSal',
-                        'MSG',
-                        'NaCl',
-                        'Quinine',
-                        'Sucrose',
+                        'T3_Citric_Acid',
+                        'T3_ArtSal',
+                        'T3_MSG',
+                        'T3_NaCl',
+                        'T3_Quinine',
+                        'T3_Sucrose',
                         )
+
+            self.trial_end = 4
+            self.base = 2
+            self.bin5L = 0.1
+            self.lxl_method = "CHISQ"
+            # number of samples for each monte carlo approximation (exact multinomial test)
+            self.monte_n = 100000
+            # Maximum p-value (percentile) to be considered significant,
+            self.chi_alpha = 0.05
+            # Length of post-stimulus time to consider
+            self.lick_max = .150
+            self.lick_window = .015
+            self.wil_alpha = .05
 
 
 

@@ -1,5 +1,5 @@
 from pathlib import Path
-from collections import namedtuple
+from collections.abc import Iterable
 import numpy as np
 import sys
 import traceback
@@ -10,13 +10,12 @@ from . import signals_stimuli as ss
 from params import Params
 
 class DataCollection:
-    def __init__(self, directory: str | Path = ''):
+    def __init__(self, directory: str | Path = '', filenames = None):
         self.params = Params()
         self.stats = None
         self.info_df = pd.DataFrame(columns=['animal', 'date', '#timestamps'])
         self.means_df = pd.DataFrame(columns=self.params.stats_columns)
         self.sems_df = pd.DataFrame(columns=self.params.stats_columns)
-
         if not directory:
             self.directory = Path(self.params.directory)
         else:
@@ -47,6 +46,27 @@ class DataCollection:
                 tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
                 tb_lines = ''.join(tb_str)
                 self.errors[file] = f"{e}\n{tb_lines}"
+
+    def get_data_file(self, filenames, paradigm='sf', functions_to_run=None,):
+        nexdata = {}
+        if paradigm not in self.data_files:
+            raise ValueError(f'Paradigm {paradigm} not found.')
+        if not isinstance(filenames, Iterable):
+            filenames = [filenames]
+        for file in self.data_files[paradigm]:
+            for name in filenames:
+                try:
+                    nexfile = get_nex(self.directory / paradigm / name)
+                    data = ss.StimuliSignals(nexfile, file)
+                    if functions_to_run:
+                        data.run_stats(functions_to_run)
+                    nexdata[name] = data
+                except Exception as e:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                    tb_lines = ''.join(tb_str)
+                    self.errors[file] = f"{e}\n{tb_lines}"
+        return nexdata
 
     @staticmethod
     def concat_dataframe_to_dataframe(df1, df2):
