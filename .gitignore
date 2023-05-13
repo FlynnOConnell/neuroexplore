@@ -1,5 +1,8 @@
 
 # User-specific stuff
+
+exclude/**
+
 .idea/**
 .idea/**/workspace.xml
 .idea/**/tasks.xml
