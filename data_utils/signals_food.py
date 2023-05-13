@@ -16,12 +16,15 @@ class EatingSignals:
         self.neurons: dict = {}
         self.intervals = {}
         self.__populate()
-        self.event_df = self.get_event_df()
-        self.neuron_df = self.build_neuron_df()
+        self.event_df = self.get_event_df() # event, start_time, end_time
+        self.count_df = self.get_counts() # event, count (number of events)
+        self.neuron_df = self.build_neuron_df() #neuron, event, mean (spike rate), sem (spike rate), count
         self.mean_df = pd.DataFrame()
         self.sem_df = pd.DataFrame()
         self.update_mean_and_sem_dataframes(self.neuron_df)
         self.num_ts = {key: len(value) for key, value in self.neurons.items()}
+        self.opto = False
+
 
     def __repr__(self) -> str:
         ens = '-E' if self.ensemble else ''
@@ -30,6 +33,10 @@ class EatingSignals:
     @staticmethod
     def get_spike_times_within_interval(timestamps, start, end):
         return timestamps[(timestamps >= start) & (timestamps <= end)]
+
+    def get_counts(self):
+        events, counts = np.unique(self.event_df['event'], return_counts=True)
+        return pd.DataFrame({'event': events, 'count': counts})
 
     def build_neuron_df(self):
         results = []
@@ -98,6 +105,10 @@ class EatingSignals:
     @property
     def sems(self):
         return self.sem_df
+
+    @property
+    def counts(self):
+        return self.count_df
 
     def reorder_stats_columns(self, df):
         existing_cols = [col for col in self.params.order if col in df.columns]

@@ -40,15 +40,3 @@ def concat_series_to_dataframe(df, series):
 # session_info = parse_filename(datadir.name)
 __fileData = reader.ReadNexFile(str(datadir))
 nex = sf.EatingSignals(__fileData)
-
-# nex_rs = ss.StimuliSignals(__fileData, datadir.name)
-# nex_rs.get_allstats()
-
-# for file_path in datadir.glob('*.nex'):
-#
-#     session_info = file_handling.parse_filename(file_path.name)
-#     if (session_info.date == '2018-08-27') & (session_info.animal == 'SFN11'):
-#         __fileData = reader.ReadNexFile(file_path)
-#         nex = signals_food.Signals(__fileData)
-#         means_df = concat_series_to_dataframe(means_df, nex.means)
-#         sems_df = concat_series_to_dataframe(sems_df, nex.sems)

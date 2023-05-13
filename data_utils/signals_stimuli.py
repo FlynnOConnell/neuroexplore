@@ -98,7 +98,17 @@ class StimuliSignals:
         self.trial_times[self.drylick + '_lxl'] = np.array(self.drylick_trials)
 
     def run_stats(self, functions_to_run):
-        """ Runs the functions specified in the functions_to_run list."""
+        """ Runs the functions specified in the functions_to_run list.
+        If 'all' is in the list, all functions will be run.
+        Options:
+            'coh': self.coherence,
+            'ili': self.ili,
+            'spont': self.spont,
+            'baseline': self.baseline,
+            'changepoint': self.changepoint,
+            'chisquareLXL': self.chisquareLXL
+
+        """
         function_map = {
             'coh': self.coherence,
             'ili': self.ili,
@@ -137,14 +147,15 @@ class StimuliSignals:
                     hist, _ = np.histogram(spont_spikes, bins)
                     spontbins.extend((hist / spontbin).tolist())
 
+                n = len(spontbins)
                 mean_spont = np.mean(spontbins)
-                std_spont = np.std(spontbins, ddof=1)
+                sem_spont = np.std(spontbins, ddof=1) / np.sqrt(n)
 
                 all_spont.append({
                     'File Name': self.filename,
                     'Neuron': neuron,
                     'Mean Spont': mean_spont,
-                    'SD Spont': std_spont
+                    'SEM Spont': sem_spont
                 })
 
         self.final_df['spont'] = pd.DataFrame(all_spont)

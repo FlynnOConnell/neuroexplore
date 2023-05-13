@@ -57,6 +57,10 @@ class Params:
             self.lick_window = .015
             self.wil_alpha = .05
 
+            self.opto_events = ['alleat0_-2', 'allwell0_-2', 'allzoneend0_2',
+                                'laser_eat0_2', 'laser_well0_2', 'laser_zoneprewell0_2',
+                                'nolaser_eat0_2', 'nolaserwell0_2', 'nolaserzone_prewell0_2']
+
 
 
 
