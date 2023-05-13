@@ -21,7 +21,7 @@ class DataCollection:
         else:
             self.directory = Path(directory)
         self.data_files = find_matching_files(self.directory, '*.nex*')
-        self.files = {paradigm: [] for paradigm in self.data_files if paradigm in ['sf', 'rs', 'replacements']}
+        self.files = {paradigm: [] for paradigm in self.data_files}
         self.errors = {}
 
     def get_data(self, paradigm='sf', num_files=None, functions_to_run=None,):
