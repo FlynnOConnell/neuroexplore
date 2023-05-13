@@ -34,7 +34,7 @@ class DataCollection:
                 nexfile = get_nex(self.directory / paradigm / file)
                 if paradigm == 'sf':
                     data = sf.EatingSignals(nexfile)
-                elif paradigm in ['rs', 'replacements']:
+                elif paradigm == ['rs']:
                     data = ss.StimuliSignals(nexfile, file)
                     if functions_to_run:
                         data.run_stats(functions_to_run)
