@@ -9,22 +9,23 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
 class EatingSignals:
-    def __init__(self, nexdata: dict) -> None:
+    def __init__(self, nexdata: dict):
+
         self.nex = nexdata
         self.ensemble = False
         self.params = Params()
         self.neurons: dict = {}
         self.intervals = {}
         self.__populate()
+
         self.event_df = self.get_event_df() # event, start_time, end_time
-        self.count_df = self.get_counts() # event, count (number of events)
+        self.counts = self.get_counts() # event, count (number of events)
         self.neuron_df = self.build_neuron_df() #neuron, event, mean (spike rate), sem (spike rate), count
-        self.mean_df = pd.DataFrame()
-        self.sem_df = pd.DataFrame()
-        self.update_mean_and_sem_dataframes(self.neuron_df)
+        self.mean_df = self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
+        self.sem_df = self.neuron_df.pivot(index='neuron', columns='event', values='sem').reset_index()
+
         self.num_ts = {key: len(value) for key, value in self.neurons.items()}
         self.opto = False
-
 
     def __repr__(self) -> str:
         ens = '-E' if self.ensemble else ''
@@ -36,7 +37,7 @@ class EatingSignals:
 
     def get_counts(self):
         events, counts = np.unique(self.event_df['event'], return_counts=True)
-        return pd.DataFrame({'event': events, 'count': counts})
+        return {event: count for event, count in zip(events, counts)}
 
     def build_neuron_df(self):
         results = []
@@ -47,68 +48,30 @@ class EatingSignals:
                 spike_times_within_interval = self.get_spike_times_within_interval(
                     timestamps, row['start_time'], row['end_time'])
                 spike_rate = len(spike_times_within_interval) / (row['end_time'] - row['start_time'])
-
                 results.append({
                     'neuron': neuron,
                     'event': row['event'],
-                    'mean_spike_rate': spike_rate
+                    'mean_spike_rate': spike_rate,
                 })
 
-        # Convert the list to a DataFrame
         spike_rates_df = pd.DataFrame(results)
 
-        # Create a new DataFrame to store the results for each neuron and event
-        final_results_df = pd.DataFrame(columns=['neuron', 'event', 'mean', 'sem'])
+        grouped_spike_rates_df = spike_rates_df.groupby(['neuron', 'event'])
+        neuron_stats = grouped_spike_rates_df.agg(
+            mean=('mean_spike_rate', 'mean'),
+            sem=('mean_spike_rate', stats.sem),
+            count=('mean_spike_rate', 'count'),
+        ).reset_index()
 
-        for neuron in spike_rates_df['neuron'].unique():
-            for event in spike_rates_df['event'].unique():
-                mask = (spike_rates_df['neuron'] == neuron) & (spike_rates_df['event'] == event)
-                mean_spike_rate = spike_rates_df.loc[mask, 'mean_spike_rate'].mean()
-                sem_spike_rate = stats.sem(spike_rates_df.loc[mask, 'mean_spike_rate'])
-
-                final_results_df = final_results_df.append({
-                    'neuron': neuron,
-                    'event': event,
-                    'mean': mean_spike_rate,
-                    'sem': sem_spike_rate
-                }, ignore_index=True)
-
-        return final_results_df
-
-    def update_mean_and_sem_dataframes(self, final_results_df):
-        unique_neurons = np.unique(final_results_df['neuron'])
-        unique_events = np.unique(final_results_df['event'])
-
-        if self.mean_df.empty:
-            self.mean_df = pd.DataFrame({'neuron': unique_neurons})
-            self.sem_df = pd.DataFrame({'neuron': unique_neurons})
-
-        for event in unique_events:
-            mean_values = []
-            sem_values = []
-
-            for neuron in unique_neurons:
-                mask = (final_results_df['neuron'] == neuron) & (final_results_df['event'] == event)
-                mean_value = final_results_df.loc[mask, 'mean'].values[0]
-                sem_value = final_results_df.loc[mask, 'sem'].values[0]
-
-                mean_values.append(mean_value)
-                sem_values.append(sem_value)
-
-            self.mean_df[event] = mean_values
-            self.sem_df[event] = sem_values
+        return neuron_stats
 
     @property
-    def means(self):
+    def means(self) -> pd.DataFrame:
         return self.mean_df
 
     @property
-    def sems(self):
+    def sems(self) -> pd.DataFrame:
         return self.sem_df
-
-    @property
-    def counts(self):
-        return self.count_df
 
     def reorder_stats_columns(self, df):
         existing_cols = [col for col in self.params.order if col in df.columns]
@@ -137,3 +100,4 @@ class EatingSignals:
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
         return intervals_df
+

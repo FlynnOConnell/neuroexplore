@@ -25,11 +25,11 @@ class DataCollection:
         self.errors = {}
 
     def get_data(self, paradigm='sf', num_files=None, functions_to_run=None,):
-        if paradigm not in self.data_files:
-            raise ValueError(f'Paradigm {paradigm} not found.')
+        if paradigm not in ['sf', 'rs']:
+            raise ValueError(f'Paradigm {paradigm} not found: Options are sf or rs.')
         if num_files:
-            self.data_files[paradigm] = self.data_files[paradigm][:num_files]
-        for file in self.data_files[paradigm]:
+            self.data_files = self.data_files[:num_files]
+        for file in self.data_files:
             try:
                 nexfile = get_nex(self.directory / paradigm / file)
                 if paradigm == 'sf':

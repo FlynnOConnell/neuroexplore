@@ -2,14 +2,9 @@
 from pathlib import Path
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-# from data_utils import data_collection, file_handling, neural_signals, neuron, signals_food
-from analysis import output
 from nex.nexfile import Reader
 from params import Params
-from data_utils.file_handling import parse_filename
 from data_utils import signals_food as sf
-from data_utils import signals_stimuli as ss
 
 datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\Laser_Processed\SF\SCIN3_2019-10-03_SF_BRFL.nex')
 reader = Reader(useNumpy=True)
@@ -40,3 +35,5 @@ def concat_series_to_dataframe(df, series):
 # session_info = parse_filename(datadir.name)
 __fileData = reader.ReadNexFile(str(datadir))
 nex = sf.EatingSignals(__fileData)
+
+x=2
