@@ -40,9 +40,7 @@ means_df = pd.DataFrame(columns=params.stats_columns)
 sems_df = pd.DataFrame(columns=params.stats_columns)
 
 for file_path in datadir.glob('*.nex'):
-
     session_info = file_handling.parse_filename(file_path.name)
-
     __fileData = reader.ReadNexFile(str(file_path))
     nex = signals_food.EatingSignals(__fileData)
     session = [session_info.animal, session_info.date, nex.neuron]

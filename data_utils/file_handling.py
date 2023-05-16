@@ -10,33 +10,33 @@ from typing import Dict, List
 from nex.nexfile import Reader
 from pathlib import Path
 
-def find_matching_files(directory: str | Path, match_string: str) -> Dict[str, List[str]]:
+def find_matching_files(directory: str | Path, match_string: str, recursive=True) -> list:
     """
     Find all files in the specified directory and its subdirectories that match the given pattern.
 
     Args:
         directory (str): The directory to search in.
         match_string (str): The pattern to match filenames against.
+        recursive (bool, optional): Whether to search subdirectories. Defaults to True.
 
     Returns:
-        Dict[str, List[str]]: A dictionary where the key is the subdirectory and the value is a list of matching filenames.
+        A list of matching filenames.
     """
     dir_path = Path(directory)
-    matching_files = {}
+    matching_files = []
 
     if not dir_path.exists() or not dir_path.is_dir():
         print(f"{directory} is not a valid directory.")
         return matching_files
 
-    # Add current directory as key and files as values if not a subdir
-    current_dir_files = [str(file.name) for file in dir_path.glob(match_string)]
-    if current_dir_files:
-        matching_files[dir_path.name] = current_dir_files
+    if not recursive:
+        return [str(file.name) for file in dir_path.glob(match_string)]
 
-    for subdir in dir_path.iterdir():
-        if subdir.is_dir():
-            subdir_matching_files = [str(file.name) for file in subdir.glob(match_string)]
-            matching_files[subdir.name] = subdir_matching_files
+    else:
+        for subdir in dir_path.iterdir():
+            if subdir.is_dir():
+                subdir_matching_files = [str(file.name) for file in subdir.glob(match_string)]
+                matching_files.extend(subdir_matching_files)
 
     return matching_files
 

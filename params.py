@@ -9,15 +9,16 @@ class Params:
                'BLW_bout_Int',
                'BRW_bout_Int',
                'FLW_bout_Int',
-               'FRW_bout_Int']
+               'FRW_bout_Int',
+            ]
             self.eating_events = [
                  'e_BL',
                  'e_BR',
                  'e_FL',
                  'e_FR'
             ]
-
             self.order = ['Spont'] + self.well_events + self.eating_events
+
             self.mapping = {
                 'BLW_bout_Int': 'w_BL',
                 'BRW_bout_Int': 'w_BR',
@@ -34,7 +35,10 @@ class Params:
 
             self.stats_columns = ['Spont'] + self.well_events + self.eating_events
             self.df_cols = ['animal', 'date'] + self.stats_columns + self.stats_columns
+            self.opto_events = ['Spont', 'alleat', 'allwell', 'allzoneend'] + self.well_events + self.eating_events
 
+            #number of trials, mean time of event, sem of event
+            self.trial_stats_columns = ['animal', 'date'] + self.stats_columns + self.stats_columns + self.stats_columns
             self.tastants_opts = (
                         'T3_Citric_Acid',
                         'T3_ArtSal',
@@ -60,6 +64,8 @@ class Params:
             self.opto_events = ['alleat0_-2', 'allwell0_-2', 'allzoneend0_2',
                                 'laser_eat0_2', 'laser_well0_2', 'laser_zoneprewell0_2',
                                 'nolaser_eat0_2', 'nolaserwell0_2', 'nolaserzone_prewell0_2']
+
+
 
 
 

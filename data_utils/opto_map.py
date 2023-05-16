@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 import warnings
 import numpy as np
 import scipy.stats as stats
@@ -8,43 +7,12 @@ from params import Params
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
-name_mapping = {
-    'grooming': 'Grooming',
-    'Grooming (1)': 'Grooming',
-
-    'w_apple': 'well_apple',
-    'w_a': 'well_apple',
-    'e_a': 'eat_apple',
-    'e_apple': 'eat_apple',
-
-    'w_nuts': 'well_nuts',
-    'w_n': 'well_nuts',
-    'e_nuts': 'eat_nuts',
-    'e_n': 'eat_nuts',
-
-    'w_c': 'well_choc',
-    'e_c': 'eat_choc',
-    'w_choc': 'well_choc',
-    'e_choc': 'eat_choc',
-
-    'w_banana': 'well_banana',
-    'e_banana': 'eat_banana',
-    'w_b': 'well_broccoli',
-    'e_b': 'eat_broccoli',
-    'w_broccoli': 'well_broccoli',
-    'e_broccoli': 'eat_broccoli',
-}
-
 def get_spike_times_within_interval(timestamps, start, end):
     return timestamps[(timestamps >= start) & (timestamps <= end)]
 
-def filter_events(df):
-    df['column_name'] = df['column_name'].replace(name_mapping)
-
 class EatingSignals:
-    def __init__(self, nexdata: dict, filename: str, opto=False,):
+    def __init__(self, nexdata: dict, opto=False):
         self.nex = nexdata
-        self.filename = filename
         self.opto = opto
         self.ensemble = False
         self.params = Params()
@@ -55,13 +23,9 @@ class EatingSignals:
 
         self.event_df = self.get_event_df() # event, start_time, end_time
         self.counts = self.get_counts() # event, count (number of events)
-        self.neuron_df = self.build_neuron_df()
-        self.all_events = np.unique(self.neuron_df.event)
+        self.neuron_df, self.laser_df  = self.build_neuron_df() #neuron, event, mean (spike rate), sem (spike rate), count
         self.mean_df = self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
         self.sem_df = self.neuron_df.pivot(index='neuron', columns='event', values='sem').reset_index()
-        self.trials_df = self.neuron_df.pivot(index='neuron', columns='event', values='trials').reset_index()
-        self.mean_time_df = self.neuron_df.pivot(index='neuron', columns='event', values='mean_time').reset_index()
-        self.mean_sem_df = self.neuron_df.pivot(index='neuron', columns='event', values='sem_time').reset_index()
 
     def __repr__(self) -> str:
         ens = '-E' if self.ensemble else ''
@@ -81,20 +45,10 @@ class EatingSignals:
                 self.neurons[var['Header']['Name']] = var['Timestamps']
                 neuron_count += 1
         self.ensemble = True if neuron_count > 1 else False
-        self.intervals = {
-            key: value for key, value in self.intervals.items() if key not in ['allwell', 'alleat', 'allzoneend',
-                                                                               'AllFile', 'nospo', 'ALLFILE',
-                                                                               'start', 'Interbout_int',
-                                                                               'nolaser_prewell', 'laser_prewell']
-        }
+        self.intervals = {key: value for key, value in self.intervals.items() if key not in ['allwell', 'alleat', 'allzoneend', 'AllFile', 'nospo', 'ALLFILE', 'start', 'Interbout_int']}
+
         if self.opto:
             self.map_keys()
-
-    def get_well_loc(self):
-        # Use os.path.splitext to split the extension from the rest of the file name
-        base_name = os.path.splitext(self.filename)[0]
-        parts = base_name.split('_')
-        return parts[-1]
 
     def map_keys(self):
         key_mapping = {
@@ -106,6 +60,18 @@ class EatingSignals:
         self.intervals = {k.rstrip('0_2') if k.endswith('0_2') else k: v for k, v in self.intervals.items() if
                           not k.endswith('-2')}
         self.intervals = {key_mapping.get(key, key): value for key, value in self.intervals.items()}
+
+    def get_opto_start_end_times(self, laser=True):
+        if not self.opto:
+            raise ValueError('Opto data not configured as true.')
+        if laser:
+            keys = ['laser_eat', 'laser_well', 'laser_prewell']
+        else:
+            keys = ['nolaser_eat', 'nolaser_well', 'nolaser_prewell']
+
+        # Create a nested list where each ndarray is converted into a list
+        nested_list = [list(self.intervals[key][0]) for key in keys if key in self.intervals]
+        return [item for sublist in nested_list for item in sublist]
 
     def build_neuron_df(self):
         results = []
@@ -121,7 +87,10 @@ class EatingSignals:
                     'event': row['event'],
                     'mean_spike_rate': spike_rate,
                     'interval_duration': interval_duration,
+                    'type': row['event_type'],
                     }
+                if self.opto:
+                    event_result['laser'] = row['laser']
                 results.append(event_result)
         spike_rates_df = pd.DataFrame(results)
 
@@ -133,15 +102,52 @@ class EatingSignals:
             mean_time=('interval_duration', 'mean'),
             sem_time=('interval_duration', stats.sem),
         ).reset_index()
-        return neuron_stats
+
+        grouped_spike_rates_df_laser = spike_rates_df.groupby(['neuron', 'event', 'laser'])
+        neuron_stats_laser = grouped_spike_rates_df_laser.agg(
+            mean=('mean_spike_rate', 'mean'),
+            sem=('mean_spike_rate', stats.sem),
+            trials=('mean_spike_rate', 'count'),
+            mean_time=('interval_duration', 'mean'),
+            sem_time=('interval_duration', stats.sem),
+        ).reset_index()
+
+        return neuron_stats, neuron_stats_laser
 
     def get_event_df(self):
         intervals_list = []
+        laser_times_true = self.get_opto_start_end_times(laser=True) if self.opto else []
+        laser_times_false = self.get_opto_start_end_times(laser=False) if self.opto else []
+
         for event, (start_times, end_times) in self.intervals.items():
             for start, end in zip(start_times, end_times):
+                # Check the event type
+                if event in self.params.well_events:
+                    event_type = 'well'
+                elif event in self.params.eating_events:
+                    event_type = 'eating'
+                elif event in ['Spont', 'spont']:
+                    event_type = 'spont'
+                else:
+                    continue
+
+                if self.opto:
+                    if event_type in ['Spont', 'spont']:
+                        continue
+                    elif start in laser_times_true:
+                        laser = True
+                    elif start in laser_times_false:
+                        laser = False
+                    else:
+                        laser = 'zone'
                     intervals_list.append(
-                        {'event': event, 'start_time': start, 'end_time': end})
+                        {'event': event, 'start_time': start, 'end_time': end, 'event_type': event_type, 'laser': laser})
+                else:
+                    intervals_list.append(
+                        {'event': event, 'start_time': start, 'end_time': end, 'type': event_type})
+
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
+
         return intervals_df
 
