@@ -37,6 +37,49 @@ class StimuliSignals:
         ens = '-E' if self.ensemble else ''
         return f'{self.__class__.__name__}{ens}'
 
+    @property
+    def fl_trials(self):
+        trials = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Trial Count')
+        trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
+        return trials
+
+    @property
+    def fl_adjmags(self):
+        mag = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Adj. Magnitude')
+        mag.insert(0, 'adj.magnitude', ['adj.magnitude' for x in range(mag.shape[0])])
+        return mag
+
+    @property
+    def fl_baseline(self):
+        baseline = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Baseline')
+        baseline.insert(0, 'baseline', ['baseline' for x in range(baseline.shape[0])])
+        return baseline
+
+    @property
+    def fl_latency(self):
+        latency = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Latency')
+        latency.insert(0, 'latency', ['latency' for x in range(latency.shape[0])])
+        return latency
+
+    @property
+    def fl_duration(self):
+        duration = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Duration')
+        duration.insert(0, 'duration', ['duration' for x in range(duration.shape[0])])
+        return duration
+
+    @property
+    def lxl_responses(self):
+        lxl = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Response Magnitude')
+        lxl.insert(0, 'LxL', ['lxl' for x in range(lxl.shape[0])])
+        return lxl
+
+    @property
+    def lxl_trials(self):
+        trials = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Trial Count')
+        trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
+        return trials
+
+
     @staticmethod
     def get_spike_times_within_interval(timestamps, start, end):
         return timestamps[(timestamps >= start) & (timestamps <= end)]
@@ -115,7 +158,7 @@ class StimuliSignals:
             'spont': self.spont,
             'baseline': self.baseline,
             'changepoint': self.changepoint,
-            'chisquareLXL': self.chisquareLXL
+            'chisquare': self.chisquareLXL
         }
 
         for function_name in functions_to_run:

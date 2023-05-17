@@ -8,9 +8,12 @@ from params import Params
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
+bad_events = ['eating_unknown', 'tail', 'Tail', 'e_unknown', 'Interbout_Int', 'nodata']
+
 name_mapping = {
     'grooming': 'Grooming',
     'Grooming (1)': 'Grooming',
+    'grooming (1)': 'Grooming',
 
     'w_apple': 'well_apple',
     'w_a': 'well_apple',
@@ -29,6 +32,7 @@ name_mapping = {
 
     'w_banana': 'well_banana',
     'e_banana': 'eat_banana',
+
     'w_b': 'well_broccoli',
     'e_b': 'eat_broccoli',
     'w_broccoli': 'well_broccoli',
@@ -43,44 +47,58 @@ def filter_events(df):
 
 class EatingSignals:
     def __init__(self, nexdata: dict, filename: str, opto=False,):
-        self.nex = nexdata
+        self.__nex = nexdata
         self.filename = filename
         self.opto = opto
-        self.ensemble = False
         self.params = Params()
         self.neurons: dict = {}
         self.intervals = {}
         self.__populate()
-        self.num_ts = {key: len(value) for key, value in self.neurons.items()}
 
         self.event_df = self.get_event_df() # event, start_time, end_time
-        self.counts = self.get_counts() # event, count (number of events)
         self.neuron_df = self.build_neuron_df()
-        self.all_events = np.unique(self.neuron_df.event)
-        self.mean_df = self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
-        self.sem_df = self.neuron_df.pivot(index='neuron', columns='event', values='sem').reset_index()
-        self.trials_df = self.neuron_df.pivot(index='neuron', columns='event', values='trials').reset_index()
-        self.mean_time_df = self.neuron_df.pivot(index='neuron', columns='event', values='mean_time').reset_index()
-        self.mean_sem_df = self.neuron_df.pivot(index='neuron', columns='event', values='sem_time').reset_index()
 
     def __repr__(self) -> str:
-        ens = '-E' if self.ensemble else ''
-        return f'{self.__class__.__name__}{ens}'
+        return f'{self.filename} - {self.num_neurons} neurons'
 
-    def get_counts(self):
-        events, counts = np.unique(self.event_df['event'], return_counts=True)
-        return {event: count for event, count in zip(events, counts)}
+    @property
+    def waveforms(self):
+        return {key: len(value) for key, value in self.neurons.items()}
+
+    @property
+    def num_neurons(self):
+        return len(self.neurons.keys())
+
+    @property
+    def events(self):
+        events = self.event_df['event'].unique()
+        return events[~np.isin(events, bad_events)]
+
+    @property
+    def means(self):
+        return self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
+
+    @property
+    def sems(self):
+        return self.neuron_df.pivot(index='neuron', columns='event', values='sem').reset_index()
+
+    @property
+    def trial_stats(self):
+        df = self.neuron_df.drop_duplicates(subset=['event', 'trials', 'mean_time', 'sem_time'])
+        df = df[['event', 'trials', 'mean_time', 'sem_time']].T.reset_index()
+        df['filename'] = self.filename
+        df.set_index('filename', inplace=True)
+        df.columns = df.iloc[0]
+        df = df.iloc[1:]
+        return df
 
     def __populate(self):
-        neuron_count = 0
         self.neurons = {}
-        for var in self.nex['Variables']:
+        for var in self.__nex['Variables']:
             if var['Header']['Type'] == 2:
                 self.intervals[var['Header']['Name']] = var['Intervals']
             if var['Header']['Type'] == 0:
                 self.neurons[var['Header']['Name']] = var['Timestamps']
-                neuron_count += 1
-        self.ensemble = True if neuron_count > 1 else False
         self.intervals = {
             key: value for key, value in self.intervals.items() if key not in ['allwell', 'alleat', 'allzoneend',
                                                                                'AllFile', 'nospo', 'ALLFILE',
@@ -138,10 +156,11 @@ class EatingSignals:
     def get_event_df(self):
         intervals_list = []
         for event, (start_times, end_times) in self.intervals.items():
-            for start, end in zip(start_times, end_times):
-                    intervals_list.append(
-                        {'event': event, 'start_time': start, 'end_time': end})
+            if event not in bad_events:
+                event = name_mapping.get(event, event)
+                for start, end in zip(start_times, end_times):
+                        intervals_list.append(
+                            {'event': event, 'start_time': start, 'end_time': end})
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
         return intervals_df
-

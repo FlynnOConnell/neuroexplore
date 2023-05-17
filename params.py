@@ -1,10 +1,12 @@
 
 class Params:
-        def __init__(self):
+        def __init__(self, paradigm='food'):
             """Initialize parameters"""
-            self.filename = 'SFN16_2019-03-25_SF.nex'
-            self.directory = r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\sf'
-            self.binsize = 0.1
+            if not paradigm in ['food', 'stim']:
+                raise ValueError("Paradigm must be 'food' or 'stim'")
+
+            # eating params
+
             self.well_events = [
                'BLW_bout_Int',
                'BRW_bout_Int',
@@ -34,11 +36,18 @@ class Params:
             self.colors['spont'] = 'gray'
 
             self.stats_columns = ['Spont'] + self.well_events + self.eating_events
+            self.trial_stats_columns = ['animal',
+                                        'date'] + self.stats_columns + self.stats_columns + self.stats_columns
             self.df_cols = ['animal', 'date'] + self.stats_columns + self.stats_columns
-            self.opto_events = ['Spont', 'alleat', 'allwell', 'allzoneend'] + self.well_events + self.eating_events
+            self.opto_stats_columns = ['Spont', 'alleat', 'allwell', 'allzoneend'] + self.well_events + self.eating_events
 
-            #number of trials, mean time of event, sem of event
-            self.trial_stats_columns = ['animal', 'date'] + self.stats_columns + self.stats_columns + self.stats_columns
+            self.opto_events = ['alleat0_-2', 'allwell0_-2', 'allzoneend0_2',
+                                'laser_eat0_2', 'laser_well0_2', 'laser_zoneprewell0_2',
+                                'nolaser_eat0_2', 'nolaserwell0_2', 'nolaserzone_prewell0_2']
+
+
+                #number of trials, mean time of event, sem of event
+
             self.tastants_opts = (
                         'T3_Citric_Acid',
                         'T3_ArtSal',
@@ -48,6 +57,8 @@ class Params:
                         'T3_Sucrose',
                         )
 
+            # stim params
+            self.binsize = 0.1
             self.trial_end = 4
             self.base = 2
             self.bin5L = 0.1
@@ -60,15 +71,3 @@ class Params:
             self.lick_max = .150
             self.lick_window = .015
             self.wil_alpha = .05
-
-            self.opto_events = ['alleat0_-2', 'allwell0_-2', 'allzoneend0_2',
-                                'laser_eat0_2', 'laser_well0_2', 'laser_zoneprewell0_2',
-                                'nolaser_eat0_2', 'nolaserwell0_2', 'nolaserzone_prewell0_2']
-
-
-
-
-
-
-
-
