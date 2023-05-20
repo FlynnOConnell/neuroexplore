@@ -18,16 +18,17 @@ all_five = []
 all_lxl = []
 
 for session in sessions:
-    for ix, signal in session.items():
+    for filename, signal in session.items():
         fl_session = pd.concat([signal.fl_baseline, signal.fl_adjmags, signal.fl_duration, signal.fl_latency, signal.fl_duration, signal.fl_trials], axis=1)
         lxl_session = pd.concat([signal.lxl_responses, signal.lxl_trials], axis=1)
-
+        fl_session['animal'] = filename
+        lxl_session['animal'] = filename
         all_five.append(fl_session)
         all_lxl.append(lxl_session)
 
 five_df = pd.concat(all_five, axis=0, ignore_index=False)
 lxl_df = pd.concat(all_lxl, axis=0, ignore_index=False)
-savename = Path(r'C:\Users\Flynn\OneDrive\Desktop\temp\save.xlsx')
+savename = Path(r'C:\Users\Flynn\OneDrive\Desktop\temp\saveag.xlsx')
 
 with pd.ExcelWriter(savename, engine='xlsxwriter', ) as writer:
     five_df.to_excel(writer, 'five_lick', float_format='%.3f', header=True, index=True)

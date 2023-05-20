@@ -4,7 +4,7 @@ class Params:
             """Initialize parameters"""
             if not paradigm in ['food', 'stim']:
                 raise ValueError("Paradigm must be 'food' or 'stim'")
-
+ 
             # eating params
 
             self.well_events = [
