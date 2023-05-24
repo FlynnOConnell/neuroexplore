@@ -8,6 +8,7 @@ import re
 from collections import namedtuple
 from typing import Dict, List
 from nex.nexfile import Reader
+
 from pathlib import Path
 
 def find_matching_files(directory: str | Path, match_string: str, recursive=True) -> list:

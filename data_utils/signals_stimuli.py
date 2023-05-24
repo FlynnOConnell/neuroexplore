@@ -9,6 +9,7 @@ import pandas as pd
 import math
 import random
 from params import Params
+from .file_handling import parse_filename
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
@@ -16,6 +17,7 @@ class StimuliSignals:
     def __init__(self, nexdata: dict, filename: str) -> None:
         self.nex = nexdata
         self.filename = filename
+        self.animal, self.date, _ = parse_filename(filename)
         self.ensemble = False
         self.params = Params()
         self.lick = 'Lick'
@@ -39,46 +41,74 @@ class StimuliSignals:
 
     @property
     def fl_trials(self):
-        trials = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Trial Count')
-        trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
-        return trials
+        try:
+            trials = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Trial Count')
+            trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
+            return trials
+        except KeyError:
+            return None
 
     @property
     def fl_adjmags(self):
-        mag = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Adj. Magnitude')
-        mag.insert(0, 'adj.magnitude', ['adj.magnitude' for x in range(mag.shape[0])])
-        return mag
+        try:
+            mag = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Adj. Magnitude')
+            mag.insert(0, 'adj.magnitude', ['adj.magnitude' for x in range(mag.shape[0])])
+            return mag
+        except KeyError:
+            return None
 
     @property
     def fl_baseline(self):
-        baseline = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Baseline')
-        baseline.insert(0, 'baseline', ['baseline' for x in range(baseline.shape[0])])
-        return baseline
+        try:
+            baseline = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Baseline')
+            baseline.insert(0, 'baseline', ['baseline' for x in range(baseline.shape[0])])
+            return baseline
+        except KeyError:
+            return None
 
     @property
     def fl_latency(self):
-        latency = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Latency')
-        latency.insert(0, 'latency', ['latency' for x in range(latency.shape[0])])
-        return latency
+        try:
+            latency = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Latency')
+            latency.insert(0, 'latency', ['latency' for x in range(latency.shape[0])])
+            return latency
+        except KeyError:
+            return None
 
     @property
     def fl_duration(self):
-        duration = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Duration')
-        duration.insert(0, 'duration', ['duration' for x in range(duration.shape[0])])
-        return duration
+        try:
+            duration = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Duration')
+            duration.insert(0, 'duration', ['duration' for x in range(duration.shape[0])])
+            return duration
+        except KeyError:
+            return None
+
+    @property
+    def fl_respstat(self):
+        # respstat = self.final_df['respstat'].pivot(index='Neuron', columns='Stimulus', values='Response Statistic')
+        respstat = self.calculate_statistics()
+
+        return respstat
+
 
     @property
     def lxl_responses(self):
-        lxl = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Response Magnitude')
-        lxl.insert(0, 'LxL', ['lxl' for x in range(lxl.shape[0])])
-        return lxl
+        try:
+            lxl = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Response Magnitude')
+            lxl.insert(0, 'LxL', ['lxl' for x in range(lxl.shape[0])])
+            return lxl
+        except KeyError:
+            return None
 
     @property
     def lxl_trials(self):
-        trials = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Trial Count')
-        trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
-        return trials
-
+        try:
+            trials = self.final_df['lxl'].pivot(index='Neuron', columns='Tastant', values='Trial Count')
+            trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
+            return trials
+        except KeyError:
+            return None
 
     @staticmethod
     def get_spike_times_within_interval(timestamps, start, end):
@@ -150,6 +180,7 @@ class StimuliSignals:
             'baseline': self.baseline,
             'changepoint': self.changepoint,
             'chisquareLXL': self.chisquareLXL
+            'respstat': self.respstat
 
         """
         function_map = {
@@ -158,7 +189,8 @@ class StimuliSignals:
             'spont': self.spont,
             'baseline': self.baseline,
             'changepoint': self.changepoint,
-            'chisquare': self.chisquareLXL
+            'chisquare': self.chisquareLXL,
+            'respstat': self.calculate_statistics
         }
 
         for function_name in functions_to_run:
@@ -434,6 +466,78 @@ class StimuliSignals:
             allILIs[tastant] = ilifinal
         self.final_df['ILI'] = pd.DataFrame.from_dict(
             {key: pd.Series(value) for key, value in allILIdata.items()})
+
+    def calculate_statistics(self, binsize=1):
+        """Calculate response statistics for each neuron."""
+
+        spont_times = self.spont_intervals(
+            self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
+        )
+        allresp = pd.DataFrame(columns=['Animal', 'Neuron', 'Tastant', 'Trial', 'Spont_m', 'Spont_std', 'Magnitude', 'Latency', 'Duration'])
+        for neuron in self.neurons:
+            # spont section (std not sem)
+            spontbins = []
+            for start, end in spont_times:
+                spont_spikes = self.timestamps[neuron][
+                                   (self.timestamps[neuron] >= start) &
+                                   (self.timestamps[neuron] < end)
+                                   ] - start
+                bins = range(0, math.floor((end - start) / 1) * binsize + 1, binsize)
+                hist, _ = np.histogram(spont_spikes, bins)
+                spontbins.extend((hist / binsize).tolist())
+
+            mean_spont = np.mean(spontbins)
+            std_spont = np.std(spontbins)
+
+            for tastant in self.tastants:
+                tastant_response = pd.DataFrame(columns=allresp.columns)
+                trials = self.trial_times[tastant]
+                for trial in trials:
+                    trial_response = pd.DataFrame(columns=allresp.columns)
+                    spks = self.get_spike_times_within_interval(self.timestamps[neuron], trial, trial + 4)
+                    bins = np.arange(spks.min(), spks.max() + 0.1, 0.1)
+                    binned_spike_times, _ = np.histogram(spks, bins=bins)
+
+                    window_size = 3
+                    is_counting = False
+                    start_index = 0
+
+                    for i in range(len(binned_spike_times) - window_size + 1):
+                        window = binned_spike_times[i: i + window_size]
+                        if window.sum() > (mean_spont + std_spont):
+                            if not is_counting:
+                                start_index = i
+                                is_counting = True
+                        else:
+                            if is_counting:  # end of a response
+                                end_index = i - 1
+                                latency = bins[start_index] - trial  # calculate latency
+                                duration = bins[end_index] - bins[start_index]
+                                # calculate magnitude by summing window and dividing by duration
+                                magnitude = binned_spike_times[start_index: end_index + 1].sum() / duration
+                                resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency, duration]
+                                resp_df = pd.DataFrame([resp], columns=allresp.columns)
+                                trial_response = trial_response.append(resp_df, ignore_index=True)
+                                is_counting = False
+
+                    # check if the counting ended with the last window
+                    if is_counting:
+                        end_index = len(binned_spike_times) - window_size
+                        latency = bins[start_index] - trial
+                        duration = bins[end_index] - bins[start_index]
+                        magnitude = binned_spike_times[start_index: end_index + 1].sum() / duration
+                        resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency,
+                                duration]
+                        resp_df = pd.DataFrame([resp], columns=allresp.columns)
+                        trial_response = trial_response.append(resp_df, ignore_index=True)
+
+                    if trial_response.empty:
+                        resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, np.nan, np.nan,
+                                np.nan]
+                        resp_df = pd.DataFrame([resp], columns=allresp.columns)
+                        trial_response = trial_response.append(resp_df, ignore_index=True)
+
+        return allresp
 
     def get_5L_penalty(self, neur, bootstrap_n=1000, boot_alpha=.05, alpha_tol=.005):
         """Obtain penalty value for us in change-point calculation."""

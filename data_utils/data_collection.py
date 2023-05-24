@@ -99,7 +99,7 @@ class DataCollection:
         return len(self.files)
 
     # for multiple files
-    def get_data(self, paradigm='SF', num_files=None, functions_to_run=None,):
+    def get_data(self, paradigm='SF', num_files=None, functions_to_run=None, exclude=[]):
         """
         Instantiate Signals class for given paradigm. If num_files is not None, only the first num_files will be used.
         Sorted by paradigm, then filename.
@@ -107,22 +107,23 @@ class DataCollection:
         if num_files:
             self.data_files = self.data_files[:num_files]
         for file in self.data_files:
-            try:
-                nexfile = get_nex(self.directory / file)
-                if paradigm in ['sf', 'SF']:
-                    data = sf.EatingSignals(nexfile, file, self.opto,)
-                elif paradigm in  ['rs', 'RS']:
-                    data = ss.StimuliSignals(nexfile, file)
-                    if functions_to_run:
-                        data.run_stats(functions_to_run)
-                else:
-                    raise ValueError(f'Paradigm {paradigm} not found.')
-                self.files[file] = data
-            except Exception as e:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                tb_lines = ''.join(tb_str)
-                self.errors[file] = f"{e}\n{tb_lines}"
+            if file not in exclude:
+                try:
+                    nexfile = get_nex(self.directory / file)
+                    if paradigm in ['sf', 'SF']:
+                        data = sf.EatingSignals(nexfile, file, self.opto,)
+                    elif paradigm in  ['rs', 'RS']:
+                        data = ss.StimuliSignals(nexfile, file)
+                        if functions_to_run:
+                            data.run_stats(functions_to_run)
+                    else:
+                        raise ValueError(f'Paradigm {paradigm} not found.')
+                    self.files[file] = data
+                except Exception as e:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                    tb_lines = ''.join(tb_str)
+                    self.errors[file] = f"{e}\n{tb_lines}"
 
     # for single file
     def get_data_by_filename(self, filenames, paradigm='sf', functions_to_run=None,):
@@ -134,15 +135,17 @@ class DataCollection:
         if not isinstance(filenames, Iterable):
             filenames = [filenames]
         for file in self.data_files:
-            for name in filenames:
+            if file in filenames:
                 try:
                     nexfile = get_nex(self.directory / file)
                     if paradigm in ['sf', 'SF']:
-                        data = sf.EatingSignals(nexfile, file, self.opto, )
+                        data = sf.EatingSignals(nexfile, file, self.opto,)
+                        self.files[file] = data
                     elif paradigm in ['rs', 'RS']:
                         data = ss.StimuliSignals(nexfile, file)
                         if functions_to_run:
                             data.run_stats(functions_to_run)
+                        self.files[file] = data
                     else:
                         raise ValueError(f'Paradigm {paradigm} not found.')
                 except Exception as e:
