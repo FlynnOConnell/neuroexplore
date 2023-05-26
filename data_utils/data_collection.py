@@ -82,6 +82,7 @@ class DataCollection:
         self.opto = opto
         self.means = pd.DataFrame(columns=self.params.stats_columns)
         self.sems = pd.DataFrame(columns=self.params.stats_columns)
+        self.std = pd.DataFrame(columns=self.params.stats_columns)
         self.session_stats = pd.DataFrame()
 
         self.stats = None
@@ -99,11 +100,13 @@ class DataCollection:
         return len(self.files)
 
     # for multiple files
-    def get_data(self, paradigm='SF', num_files=None, functions_to_run=None, exclude=[]):
+    def get_data(self, paradigm='SF', num_files=None, functions_to_run=None, exclude=None):
         """
         Instantiate Signals class for given paradigm. If num_files is not None, only the first num_files will be used.
         Sorted by paradigm, then filename.
         """
+        if exclude is None:
+            exclude = []
         if num_files:
             self.data_files = self.data_files[:num_files]
         for file in self.data_files:
@@ -168,11 +171,12 @@ class DataCollection:
                 self.info_df.loc[len(self.info_df)] = session + [data.waveforms[neuron]]
             self.means = concat_dataframe_to_dataframe(self.means, data.means)
             self.sems = concat_dataframe_to_dataframe(self.sems, data.sems)
+            self.std = concat_dataframe_to_dataframe(self.std, data.stds)
 
             if self.means.shape != self.sems.shape:
                 raise ValueError(f'Means and SEMs dataframes are not the same size:'
                                  f' \n {filename} \n {self.means.shape} \n {self.sems.shape}')
-        self.stats = pd.concat([self.info_df, self.means, self.sems], axis=1)
+        self.stats = pd.concat([self.info_df, self.means, self.sems, self.std], axis=1)
 
     @staticmethod
     def output(data, output_dir, filename='stats', sheet_name='Sheet1',):

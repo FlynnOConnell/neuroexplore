@@ -86,11 +86,28 @@ class StimuliSignals:
 
     @property
     def fl_respstat(self):
-        # respstat = self.final_df['respstat'].pivot(index='Neuron', columns='Stimulus', values='Response Statistic')
         respstat = self.calculate_statistics()
-
         return respstat
 
+    @property
+    def fl_respstat_mag(self):
+        respstat = self.fl_respstat
+        return respstat.pivot(index='Neuron', columns='Tastant', values='Magnitude')
+
+    @property
+    def fl_respstat_lat(self):
+        respstat = self.fl_respstat
+        return respstat.pivot(index='Neuron', columns='Tastant', values='Latency')
+
+    @property
+    def fl_respstat_dur(self):
+        respstat = self.fl_respstat
+        return respstat.pivot(index='Neuron', columns='Tastant', values='Duration')
+
+    @property
+    def fl_respstat_sig(self):
+        respstat = self.fl_respstat
+        return respstat[respstat['Magnitude'].notnull()]
 
     @property
     def lxl_responses(self):
@@ -213,24 +230,27 @@ class StimuliSignals:
                 spontbins = []
 
                 for start, end in spont_times:
-                    spont_spikes = self.timestamps[neuron][
-                                       (self.timestamps[neuron] >= start) &
-                                       (self.timestamps[neuron] < end)
-                                       ] - start
 
-                    bins = range(0, math.floor((end - start) / 1) * spontbin + 1, spontbin)
+                    mask = (self.timestamps[neuron] >= start) & (self.timestamps[neuron] < end)
+                    spont_spikes = self.timestamps[neuron][mask] - start
+
+                    bins = range(0, math.floor((end - start)) * spontbin + 1, spontbin)
                     hist, _ = np.histogram(spont_spikes, bins)
-                    spontbins.extend((hist / spontbin).tolist())
+                    spontbins.extend((hist / spontbin))
 
-                n = len(spontbins)
-                mean_spont = np.mean(spontbins)
-                sem_spont = np.std(spontbins, ddof=1) / np.sqrt(n)
+                spontbins = np.array(spontbins)
+                n = spontbins.size
+
+                mean_spont = spontbins.mean()
+                std_spont = spontbins.std(ddof=1)
+                sem_spont = std_spont / np.sqrt(n)
 
                 all_spont.append({
                     'File Name': self.filename,
                     'Neuron': neuron,
                     'Mean Spont': mean_spont,
-                    'SEM Spont': sem_spont
+                    'SEM Spont': sem_spont,
+                    'STD Spont': std_spont,
                 })
 
         self.final_df['spont'] = pd.DataFrame(all_spont)
@@ -467,7 +487,85 @@ class StimuliSignals:
         self.final_df['ILI'] = pd.DataFrame.from_dict(
             {key: pd.Series(value) for key, value in allILIdata.items()})
 
+    def calculate_trial_response(self, binned_spike_times, bins, trial, neuron, tastant, mean_spont, std_spont):
+        window_size = 3
+        is_counting = False
+        responses = []
+        start_index = None
+        for i in range(len(binned_spike_times) - window_size + 1):
+            window = binned_spike_times[i: i + window_size]
+            if window.sum() > (mean_spont + std_spont):
+                if not is_counting:
+                    start_index = i
+                    is_counting = True
+            else:
+                if is_counting:  # end of a response
+                    end_index = i - 1
+                    responses.append(self.calculate_response(bins, start_index, end_index, trial, neuron, tastant,
+                                                             mean_spont, std_spont, binned_spike_times))
+                    is_counting = False
+
+        # check if the counting ended with the last window
+        if is_counting:
+            end_index = len(binned_spike_times) - window_size
+            responses.append(self.calculate_response(bins, start_index, end_index, trial, neuron, tastant, mean_spont,
+                                                     std_spont, binned_spike_times))
+
+        if not responses:
+            return [[neuron, tastant, trial, mean_spont, std_spont, np.nan, np.nan, np.nan]]
+
+        return responses
+
+    @staticmethod
+    def calculate_response(bins, start_index, end_index, trial, neuron, tastant, mean_spont, std_spont, binned_spike_times):
+        latency = bins[start_index] - trial  # calculate latency
+        duration = bins[end_index] - bins[start_index]
+        # calculate magnitude by summing window and dividing by duration
+        magnitude = binned_spike_times[start_index: end_index + 1].sum() / duration
+        resp = [neuron, tastant, trial, mean_spont, std_spont, magnitude, latency, duration]
+        return resp
+
     def calculate_statistics(self, binsize=1):
+        """Calculate response statistics for each neuron."""
+
+        spont_times = self.spont_intervals(
+            self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
+        )
+        allresp = []
+        for neuron in self.neurons:
+            # spont section (std not sem)
+            spontbins = []
+            for start, end in spont_times:
+                spont_spikes = self.timestamps[neuron][
+                                   (self.timestamps[neuron] >= start) &
+                                   (self.timestamps[neuron] < end)
+                                   ] - start
+                bins = range(0, math.floor((end - start) / 1) * binsize + 1, binsize)
+                hist, _ = np.histogram(spont_spikes, bins)
+                spontbins.extend((hist / binsize).tolist())
+
+            mean_spont = np.mean(spontbins)
+            std_spont = np.std(spontbins)
+            sem_spont = stats.sem(spontbins)
+
+            for tastant in self.tastants:
+                trials = self.trial_times[tastant]
+                for trial in trials:
+
+                    spks = self.get_spike_times_within_interval(self.timestamps[neuron], trial, trial + 4)
+                    bins = np.arange(spks.min(), spks.max() + 0.1, 0.1)
+                    binned_spike_times, _ = np.histogram(spks, bins=bins)
+
+                    trial_response = self.calculate_trial_response(binned_spike_times, bins, trial, neuron, tastant,
+                                                              mean_spont, std_spont)
+                    if not trial_response:
+                        trial_response = [neuron, tastant, trial, mean_spont, std_spont, np.nan, np.nan, np.nan]
+                    allresp.extend(trial_response)
+
+        return pd.DataFrame(allresp, columns=['Neuron', 'Tastant', 'Trial', 'Spont_m', 'Spont_std', 'Magnitude',
+                                              'Latency', 'Duration'])
+
+    def temp_calculate_statistics(self, binsize=1):
         """Calculate response statistics for each neuron."""
 
         spont_times = self.spont_intervals(
@@ -488,6 +586,7 @@ class StimuliSignals:
 
             mean_spont = np.mean(spontbins)
             std_spont = np.std(spontbins)
+            sem_spont = stats.sem(spontbins)
 
             for tastant in self.tastants:
                 tastant_response = pd.DataFrame(columns=allresp.columns)
@@ -536,7 +635,8 @@ class StimuliSignals:
                                 np.nan]
                         resp_df = pd.DataFrame([resp], columns=allresp.columns)
                         trial_response = trial_response.append(resp_df, ignore_index=True)
-
+                tastant_response = tastant_response.append(trial_response, ignore_index=True)
+            allresp = allresp.append(tastant_response, ignore_index=True)
         return allresp
 
     def get_5L_penalty(self, neur, bootstrap_n=1000, boot_alpha=.05, alpha_tol=.005):

@@ -42,7 +42,17 @@ datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs')
 
 data = data_collection.DataCollection(datadir)
 # data.get_data(paradigm='rs',  functions_to_run=['changepoint', 'chisquare', 'baseline', 'ili', 'spont', 'coh'], exclude=None)
-data.get_data_by_filename(["SFN14_2019-02-07_RS.nex"], paradigm='rs', functions_to_run=['respstat'])
+data.get_data(paradigm='rs', functions_to_run=['respstat'])
+
+dfs = []
+resp = pd.DataFrame()
+for name, file in data.files.items():
+    sig = file.spont_stats
+    if not sig.empty:
+        dfs.append(sig)
+
+resp = pd.concat(dfs, axis=0, ignore_index=False)
+
 
 x=5
 if __name__ == "__main__":
