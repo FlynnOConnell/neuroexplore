@@ -12,7 +12,9 @@ from data_utils.parser import PLACE_NAME_MAPPING, INCORRECT_NAME_MAPPING
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-bad_events = ['*unknown*', 'tail*', '*Tail*', '*Interbout*', '*data*', 'es*', '*cheerios*', '*banana*', '*mush*', '*cheese*']
+bad_events = ['*unknown*', 'tail*', '*Tail*', '*Interbout*',
+              '*data*', 'es*', '*cheerios*', '*banana*', '*mush*',
+              '*cheese*', 'e_cherrios', 'eat_empty','eat_e']
 
 def is_bad_event(event):
     for pattern in bad_events:
@@ -36,6 +38,7 @@ class EatingSignals:
         self.event_df = self.get_event_df()
         self.neuron_df = self.build_neuron_df()
         self.spont_stats = self.get_spont_mean_std()
+        assert 'BLW_bout_Int' not in self.neuron_df['event'].unique(), 'BLW_bout_Int should not be in neuron_df'
 
     def __repr__(self) -> str:
         return f'{self.filename} - {self.num_neurons} neurons'
@@ -165,7 +168,7 @@ class EatingSignals:
             df['new_event'] = df['event'].apply(
                 lambda event: self.transform_event(event, row_name_map))
             df=df.drop(columns=['event'])
-
+            df=df.rename(columns={'new_event':'event'})
         return df
 
     def get_event_df(self):
