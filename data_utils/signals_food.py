@@ -6,46 +6,22 @@ import scipy.stats as stats
 import pandas as pd
 from params import Params
 from functools import partial
+import fnmatch
+from data_utils.parser import PLACE_NAME_MAPPING, INCORRECT_NAME_MAPPING
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
-bad_events = ['eating_unknown', 'tail', 'Tail', 'e_unknown', 'Interbout_Int', 'nodata']
+bad_events = ['*unknown*', 'tail*', '*Tail*', '*Interbout*', '*data*', 'es*', '*cheerios*', '*banana*', '*mush*', '*cheese*']
 
-name_mapping = {
-    'grooming': 'Grooming',
-    'Grooming (1)': 'Grooming',
-    'grooming (1)': 'Grooming',
-
-    'w_apple': 'well_apple',
-    'w_a': 'well_apple',
-    'e_a': 'eat_apple',
-    'e_apple': 'eat_apple',
-
-    'w_nuts': 'well_nuts',
-    'w_n': 'well_nuts',
-    'e_nuts': 'eat_nuts',
-    'e_n': 'eat_nuts',
-
-    'w_c': 'well_choc',
-    'e_c': 'eat_choc',
-    'w_choc': 'well_choc',
-    'e_choc': 'eat_choc',
-
-    'w_banana': 'well_banana',
-    'e_banana': 'eat_banana',
-
-    'w_b': 'well_broccoli',
-    'e_b': 'eat_broccoli',
-    'w_broccoli': 'well_broccoli',
-    'e_broccoli': 'eat_broccoli',
-}
+def is_bad_event(event):
+    for pattern in bad_events:
+        if fnmatch.fnmatch(event, pattern):
+            return True
+    return False
 
 def get_spike_times_within_interval(timestamps, start, end):
     return timestamps[(timestamps >= start) & (timestamps <= end)]
-
-def filter_events(df):
-    df['column_name'] = df['column_name'].replace(name_mapping)
 
 class EatingSignals:
     def __init__(self, nexdata: dict, filename: str, opto=False,):
@@ -162,16 +138,50 @@ class EatingSignals:
         ).reset_index()
         return neuron_stats
 
+    @staticmethod
+    def transform_event(event, row_name_map):
+        """
+        Transforms event name to match the row name in the interval dataframe
+        """
+        prefix = event[:1] # first letter of event: e will be eating, F,and B will both be well locations
+        mapper = None
+        new_event = None
+        new_prefix = None
+        if prefix == 'e':
+            new_prefix = "eat_"
+            mapper = event[-2:] # last 2 letters of event: Int, Out, In
+        elif prefix == 'F' or prefix == 'B':
+            new_prefix = "well_"
+            mapper = event[:2] # first 2 letters of event: FL, FR, BL, BR
+
+        # Checking prefix in row_name_map and replacing it, if not found keeping original
+        new_ev = row_name_map.get(mapper, prefix)
+        new_event = new_prefix + new_ev
+        return new_event
+
+    def parse_dataframe(self, df):
+        # Check if the filename is in the mapping of files with food well locations.
+        if self.filename in PLACE_NAME_MAPPING:
+            # Get the row name mapping for this filename.
+            row_name_map = PLACE_NAME_MAPPING[self.filename]
+
+            # Create a new event column based on the current one
+            df['new_event'] = df['event'].apply(
+                lambda event: self.transform_event(event, row_name_map))
+
+        return df
+
     def get_event_df(self):
         intervals_list = []
         for event, (start_times, end_times) in self.intervals.items():
-            if event not in bad_events:
-                event = name_mapping.get(event, event)
+            if not is_bad_event(event): # if event is not in bad events
+                event = INCORRECT_NAME_MAPPING.get(event, event)
                 for start, end in zip(start_times, end_times):
                         intervals_list.append(
                             {'event': event, 'start_time': start, 'end_time': end})
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
+        intervals_df = self.parse_dataframe(intervals_df)
         return intervals_df
 
     @staticmethod
@@ -217,5 +227,3 @@ class EatingSignals:
                                           'std_spike_rate': std_spike_rate},
                                          ignore_index=True)
         return result_df
-
-
