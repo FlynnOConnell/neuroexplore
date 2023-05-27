@@ -8,26 +8,20 @@ class Params:
             # eating params
 
             self.well_events = [
-               'BLW_bout_Int',
-               'BRW_bout_Int',
-               'FLW_bout_Int',
-               'FRW_bout_Int',
+               'well_dchoc',
+               'well_mchoc',
+               'well_nuts',
+               'well_apple',
+                'well_brocc'
             ]
             self.eating_events = [
-                 'e_BL',
-                 'e_BR',
-                 'e_FL',
-                 'e_FR'
+                 'eat_dchoc',
+                 'eat_mchoc',
+                 'eat_nuts',
+                 'eat_apple',
+                 'eat_brocc'
             ]
             self.order = ['Spont'] + self.well_events + self.eating_events
-
-            self.mapping = {
-                'BLW_bout_Int': 'w_BL',
-                'BRW_bout_Int': 'w_BR',
-                'FLW_bout_Int': 'w_FL',
-                'FRW_bout_Int': 'w_FR'
-            }
-
             self.colors = {key: "blue" for key in self.well_events}
             self.colors['e_FR'] = 'brown'
             self.colors['e_BR'] = 'orange'
