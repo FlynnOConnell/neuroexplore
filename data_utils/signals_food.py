@@ -49,11 +49,6 @@ class EatingSignals:
         return len(self.neurons.keys())
 
     @property
-    def events(self):
-        events = self.event_df['event'].unique()
-        return events[~np.isin(events, bad_events)]
-
-    @property
     def means(self):
         return self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
 
@@ -145,7 +140,6 @@ class EatingSignals:
         """
         prefix = event[:1] # first letter of event: e will be eating, F,and B will both be well locations
         mapper = None
-        new_event = None
         new_prefix = None
         if prefix == 'e':
             new_prefix = "eat_"
@@ -153,13 +147,15 @@ class EatingSignals:
         elif prefix == 'F' or prefix == 'B':
             new_prefix = "well_"
             mapper = event[:2] # first 2 letters of event: FL, FR, BL, BR
-
+        else:
+            return event # if prefix is not e, F, or B, return original event
         # Checking prefix in row_name_map and replacing it, if not found keeping original
         new_ev = row_name_map.get(mapper, prefix)
         new_event = new_prefix + new_ev
         return new_event
 
     def parse_dataframe(self, df):
+
         # Check if the filename is in the mapping of files with food well locations.
         if self.filename in PLACE_NAME_MAPPING:
             # Get the row name mapping for this filename.
@@ -168,20 +164,21 @@ class EatingSignals:
             # Create a new event column based on the current one
             df['new_event'] = df['event'].apply(
                 lambda event: self.transform_event(event, row_name_map))
+            df=df.drop(columns=['event'])
 
         return df
 
     def get_event_df(self):
         intervals_list = []
         for event, (start_times, end_times) in self.intervals.items():
-            if not is_bad_event(event): # if event is not in bad events
-                event = INCORRECT_NAME_MAPPING.get(event, event)
                 for start, end in zip(start_times, end_times):
                         intervals_list.append(
                             {'event': event, 'start_time': start, 'end_time': end})
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
         intervals_df = self.parse_dataframe(intervals_df)
+        intervals_df = intervals_df[~intervals_df['event'].apply(is_bad_event)]
+        intervals_df['event'] = intervals_df['event'].map(INCORRECT_NAME_MAPPING).fillna(intervals_df['event'])
         return intervals_df
 
     @staticmethod
