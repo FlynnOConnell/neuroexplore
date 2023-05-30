@@ -139,13 +139,13 @@ PLACE_NAME_MAPPING = {
         "FR": "nuts",
         "BR": "mchoc",
     },
-    "SFN13_2018-02-21_SF.nex": {
+    "SFN13_2019-02-21_SF.nex": {
         "FL": "brocc",
         "BL": "nuts",
         "FR": "apple",
         "BR": "empty",
     },
-    "SFN13_2018-03-29_SF.nex": {
+    "SFN13_2019-03-29_SF.nex": {
         "FL": "apple",
         "BL": "mchoc",
         "FR": "nuts",
@@ -157,31 +157,31 @@ PLACE_NAME_MAPPING = {
         "FR": "mchoc",
         "BR": "apple",
     },
-    "SFN16_2018-02-05_SF.nex": {
+    "SFN16_2019-02-05_SF.nex": {
         "FL": "apple",
         "BL": "mchoc",
         "FR": "empty",
         "BR": "brocc",
     },
-    "SFN16_2018-03-25_SF.nex": {
+    "SFN16_2019-03-25_SF.nex": {
         "FL": "nuts",
         "BL": "mchoc",
         "FR": "empty",
         "BR": "brocc",
     },
-    "SFN17_2018-02-06_SF.nex": {
+    "SFN17_2019-02-06_SF.nex": {
         "FL": "apple",
         "BL": "empty",
         "FR": "mchoc",
         "BR": "nuts",
     },
-    "SFN17_2018-02-27_SF.nex": {
+    "SFN17_2019-02-27_SF.nex": {
         "FL": "nuts",
         "BL": "empty",
         "FR": "apple",
         "BR": "mchoc",
     },
-    "SFN17_2018-03-13_SF.nex": {
+    "SFN17_2019-03-13_SF.nex": {
         "FL": "nuts",
         "BL": "empty",
         "FR": "apple",
@@ -216,13 +216,15 @@ INCORRECT_NAME_MAPPING = {
     'e_dchoc': 'eat_dchoc',
     'w_dchoc': 'well_dchoc',
 
-    'w_banana': 'well_banana',
-    'e_banana': 'eat_banana',
+    'e_brocc': 'eat_brocc',
+    'w_brocc': 'well_brocc',
 
-    'w_b': 'well_broccoli',
-    'e_b': 'eat_broccoli',
-    'w_broccoli': 'well_broccoli',
-    'e_broccoli': 'eat_broccoli',
-
+    'w_b': 'well_brocc',
+    'w_broc': 'well_brocc',
+    'e_broc': 'eat_brocc',
+    'e_b': 'eat_brocc',
+    'w_broccoli': 'well_brocc',
+    'e_broccoli': 'eat_brocc',
+    'w_e': 'well_empty',
     'w_empty': 'well_empty',
 }
