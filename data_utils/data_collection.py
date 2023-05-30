@@ -111,7 +111,7 @@ class DataCollection:
             self.data_files = self.data_files[:num_files]
         for file in self.data_files:
             if file not in exclude:
-                try:
+                #try:
                     nexfile = get_nex(self.directory / file)
                     if paradigm in ['sf', 'SF']:
                         data = sf.EatingSignals(nexfile, file, self.opto,)
@@ -122,11 +122,11 @@ class DataCollection:
                     else:
                         raise ValueError(f'Paradigm {paradigm} not found.')
                     self.files[file] = data
-                except Exception as e:
-                    exc_type, exc_value, exc_traceback = sys.exc_info()
-                    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                    tb_lines = ''.join(tb_str)
-                    self.errors[file] = f"{e}\n{tb_lines}"
+                #except Exception as e:
+                #    exc_type, exc_value, exc_traceback = sys.exc_info()
+                #    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                #    tb_lines = ''.join(tb_str)
+                #    self.errors[file] = f"{e}\n{tb_lines}"
 
     # for single file
     def get_data_by_filename(self, filenames, paradigm='sf', functions_to_run=None,):
