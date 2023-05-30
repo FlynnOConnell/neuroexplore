@@ -1,10 +1,7 @@
-import sys
 from pathlib import Path
 from data_utils import data_collection
 import pandas as pd
 import pickle
-from analysis import statistics
-from metricspace import distances, metrics, model
 from metricspace.py.distances import DistanceMatrix
 
 
@@ -37,8 +34,6 @@ def save_sessions(data=None):
         lxl_session = pd.concat([signal.lxl_responses, signal.lxl_trials], axis=1)
         fl_session['animal'] = filename
         lxl_session['animal'] = filename
-        all_five.append(fl_session)
-        all_lxl.append(lxl_session)
 
     five_df = pd.concat(all_five, axis=0, ignore_index=False)
     lxl_df = pd.concat(all_lxl, axis=0, ignore_index=False)
