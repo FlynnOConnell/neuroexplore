@@ -14,7 +14,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 bad_events = ['*unknown*', 'tail*', '*Tail*', '*Interbout*',
               '*data*', 'es*', '*cheerios*', '*banana*', '*mush*',
-              '*cheese*', 'e_cherrios', 'eat_empty','eat_e']
+              '*cheese*', 'e_cherrios', 'eat_empty', 'eat_e']
+
 
 def is_bad_event(event):
     for pattern in bad_events:
@@ -22,11 +23,13 @@ def is_bad_event(event):
             return True
     return False
 
+
 def get_spike_times_within_interval(timestamps, start, end):
     return timestamps[(timestamps >= start) & (timestamps <= end)]
 
+
 class EatingSignals:
-    def __init__(self, nexdata: dict, filename: str, opto=False,):
+    def __init__(self, nexdata: dict, filename: str, opto=False, ):
         self.__nex = nexdata
         self.filename = filename
         self.opto = opto
@@ -120,7 +123,7 @@ class EatingSignals:
                     'event': row['event'],
                     'mean_spike_rate': spike_rate,
                     'interval_duration': interval_duration,
-                    }
+                }
                 results.append(event_result)
         spike_rates_df = pd.DataFrame(results)
 
@@ -141,17 +144,17 @@ class EatingSignals:
         """
         Transforms event name to match the row name in the interval dataframe
         """
-        prefix = event[:1] # first letter of event: e will be eating, F,and B will both be well locations
+        prefix = event[:1]  # first letter of event: e will be eating, F,and B will both be well locations
         mapper = None
         new_prefix = None
         if prefix == 'e':
             new_prefix = "eat_"
-            mapper = event[-2:] # last 2 letters of event: Int, Out, In
+            mapper = event[-2:]  # last 2 letters of event: Int, Out, In
         elif prefix == 'F' or prefix == 'B':
             new_prefix = "well_"
-            mapper = event[:2] # first 2 letters of event: FL, FR, BL, BR
+            mapper = event[:2]  # first 2 letters of event: FL, FR, BL, BR
         else:
-            return event # if prefix is not e, F, or B, return original event
+            return event  # if prefix is not e, F, or B, return original event
         # Checking prefix in row_name_map and replacing it, if not found keeping original
         new_ev = row_name_map.get(mapper, prefix)
         new_event = new_prefix + new_ev
@@ -167,16 +170,16 @@ class EatingSignals:
             # Create a new event column based on the current one
             df['new_event'] = df['event'].apply(
                 lambda event: self.transform_event(event, row_name_map))
-            df=df.drop(columns=['event'])
-            df=df.rename(columns={'new_event':'event'})
+            df = df.drop(columns=['event'])
+            df = df.rename(columns={'new_event': 'event'})
         return df
 
     def get_event_df(self):
         intervals_list = []
         for event, (start_times, end_times) in self.intervals.items():
-                for start, end in zip(start_times, end_times):
-                        intervals_list.append(
-                            {'event': event, 'start_time': start, 'end_time': end})
+            for start, end in zip(start_times, end_times):
+                intervals_list.append(
+                    {'event': event, 'start_time': start, 'end_time': end})
         intervals_df = pd.DataFrame(intervals_list)
         intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
         intervals_df = self.parse_dataframe(intervals_df)
@@ -220,10 +223,9 @@ class EatingSignals:
             # Calculate mean and standard deviation of spontaneous spike rates for current neuron
             mean_spike_rate = np.mean(spont_spike_rates)
             std_spike_rate = np.std(spont_spike_rates)
-
+            new_row = pd.DataFrame({'neuron': neuron,
+                                    'mean_spike_rate': mean_spike_rate,
+                                    'std_spike_rate': std_spike_rate}, index=[0])
             # Add the results to the dataframe
-            result_df = result_df.append({'neuron': neuron,
-                                          'mean_spike_rate': mean_spike_rate,
-                                          'std_spike_rate': std_spike_rate},
-                                         ignore_index=True)
+            result_df = pd.concat([result_df, new_row], ignore_index=True)
         return result_df

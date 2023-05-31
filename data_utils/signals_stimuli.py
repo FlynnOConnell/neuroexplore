@@ -10,8 +10,10 @@ import math
 import random
 from params import Params
 from .file_handling import parse_filename
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
+
 
 class StimuliSignals:
     def __init__(self, nexdata: dict, filename: str) -> None:
@@ -158,7 +160,7 @@ class StimuliSignals:
                 corrected_values = []
                 for ts in value:
                     correct_time = \
-                    np.where((self.timestamps[self.lick] < ts + .005) & (self.timestamps[self.lick] > ts - .005))[0]
+                        np.where((self.timestamps[self.lick] < ts + .005) & (self.timestamps[self.lick] > ts - .005))[0]
                     if len(correct_time) == 1:
                         corrected_values.append(self.timestamps[self.lick][correct_time][0])
                     elif len(correct_time) == 0:
@@ -230,7 +232,6 @@ class StimuliSignals:
                 spontbins = []
 
                 for start, end in spont_times:
-
                     mask = (self.timestamps[neuron] >= start) & (self.timestamps[neuron] < end)
                     spont_spikes = self.timestamps[neuron][mask] - start
 
@@ -265,10 +266,12 @@ class StimuliSignals:
                 allspikes = []
                 trial_count = len(value)
                 for trial_time in value:  # for each trial, get spikes centered around trial time
-                    allspikes.extend((self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - self.params.base) & (
-                            self.timestamps[neuron] < trial_time + self.params.trial_end))] - trial_time).tolist())
+                    allspikes.extend(
+                        (self.timestamps[neuron][np.where((self.timestamps[neuron] > trial_time - self.params.base) & (
+                                self.timestamps[neuron] < trial_time + self.params.trial_end))] - trial_time).tolist())
                 allbins = np.histogram(allspikes, np.linspace(-self.params.base, self.params.trial_end, num=int(
-                    (self.params.trial_end + self.params.base) / self.params.bin5L + 1)))[0]  # create histogram of spikes
+                    (self.params.trial_end + self.params.base) / self.params.bin5L + 1)))[
+                    0]  # create histogram of spikes
                 baselines.append(np.mean(allbins[0:20]) / (self.params.bin5L * trial_count))
             all_baseline.append({'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': np.mean(
                 baselines), 'Baseline STDEV': np.std(baselines, ddof=1)})
@@ -284,16 +287,20 @@ class StimuliSignals:
             # get all spike timestamps around drylick activity, time adjusted around each drylick
             for i in range(len(self.trial_times[self.drylick + '_lxl'])):
                 dryspikes.extend(
-                    self.timestamps[neuron][np.where((self.timestamps[neuron] >= self.trial_times[self.drylick + '_lxl'][i]) & (
-                            self.timestamps[neuron] < (self.trial_times[self.drylick + '_lxl'][i] + self.params.lick_max)))] -
+                    self.timestamps[neuron][
+                        np.where((self.timestamps[neuron] >= self.trial_times[self.drylick + '_lxl'][i]) & (
+                                self.timestamps[neuron] < (
+                                    self.trial_times[self.drylick + '_lxl'][i] + self.params.lick_max)))] -
                     self.trial_times[self.drylick + '_lxl'][i])
             # number of drylick trial-related neuron spikes
             ndry = len(dryspikes)
             dryhist = np.histogram(dryspikes, np.arange(
                 0, self.params.lick_max + self.params.lick_window, self.params.lick_window))[0]  # bin the spikes
             for tastant in self.tastants:  # run chi square
-                lxl_datum = self.LXL(neuron, tastant, self.timestamps[tastant], self.timestamps[neuron], dryhist, ndry, lick_max=self.params.lick_max,
-                                lick_window=self.params.lick_window, wil_alpha=self.params.wil_alpha, chi_alpha=self.params.chi_alpha)
+                lxl_datum = self.LXL(neuron, tastant, self.timestamps[tastant], self.timestamps[neuron], dryhist, ndry,
+                                     lick_max=self.params.lick_max,
+                                     lick_window=self.params.lick_window, wil_alpha=self.params.wil_alpha,
+                                     chi_alpha=self.params.chi_alpha)
                 all_LXL.append(lxl_datum)
         self.final_df['lxl'] = pd.DataFrame(all_LXL)
         xxx = 5
@@ -310,6 +317,7 @@ class StimuliSignals:
 
             valid_indices = np.where(change_times >= 0)
             return change_times[valid_indices], changepoints[valid_indices]
+
         def get_response_stats(neuron, allbins, changepoints, change_times):
             if len(change_times) == 1 and change_times[0] > 3.5 or len(change_times) == 0:
                 return 'None', 'None', 'None', 'None'
@@ -352,7 +360,8 @@ class StimuliSignals:
                 change_times, changepoints = process_changepoints(changepoints)
                 init = np.copy(change_times)
                 baseline = np.mean(allbins[0:20]) / (0.1 * trial_count)
-                magnitude, adj_magnitude, latency, duration = get_response_stats(neuron, allbins, changepoints, change_times)
+                magnitude, adj_magnitude, latency, duration = get_response_stats(neuron, allbins, changepoints,
+                                                                                 change_times)
                 this_5L = {'File': self.filename,
                            'Neuron': neuron,
                            'Stimulus': key,
@@ -398,7 +407,8 @@ class StimuliSignals:
         # end Kattle section
         for neuron in self.neurons:
             # bin the spikes
-            cell_bin = np.histogram(self.timestamps[neuron], np.arange(self.timestamps['Start'], self.timestamps['Stop'], binsize))[0]
+            cell_bin = np.histogram(self.timestamps[neuron],
+                                    np.arange(self.timestamps['Start'], self.timestamps['Stop'], binsize))[0]
 
             f, Cxy = signal.coherence(lick_bin, cell_bin, fs=1 / binsize, nperseg=numbin,
                                       window='hann', detrend=False, noverlap=numbin / 2)
@@ -410,7 +420,7 @@ class StimuliSignals:
             for i in range(0, len(four) - 3):
                 if np.all(four[i:i + 3] > Z):
                     coherent = True
-            if coherent: # record coherence data
+            if coherent:  # record coherence data
                 self.all_responses[neuron]['COH'] = True
                 coh_data.loc[len(coh_data)] = [self.filename, neuron, max(four), max(
                     six), max(ten), np.mean(four), np.mean(six), np.mean(ten)]
@@ -428,15 +438,17 @@ class StimuliSignals:
             while len(self.timestamps[tastant]) / 5 > len(self.trial_times[tastant]):
                 # remove any licks that followed another lick too quickly (must be artifact)
                 self.timestamps[tastant] = np.delete(self.timestamps[tastant],
-                                                np.where(np.diff(self.timestamps[tastant]) <= 0.1)[0] + 1)
+                                                     np.where(np.diff(self.timestamps[tastant]) <= 0.1)[0] + 1)
                 for i in range(len(self.trial_times[tastant]) - 1):  # for each trial
                     # if this trial had more than 5 licks
                     if len(np.where((self.timestamps[tastant] >= self.trial_times[tastant][i]) & (
                             self.timestamps[tastant] < self.trial_times[tastant][i + 1]))[0]) > 5:
                         self.timestamps[tastant] = np.delete(self.timestamps[tastant],
-                                                        np.where((self.timestamps[tastant] >= self.trial_times[tastant][i]) & (
-                                                                self.timestamps[tastant] < self.trial_times[tastant][i + 1]))[0][
-                                                            -1])  # delete the final lick of the trial
+                                                             np.where((self.timestamps[tastant] >=
+                                                                       self.trial_times[tastant][i]) & (
+                                                                              self.timestamps[tastant] <
+                                                                              self.trial_times[tastant][i + 1]))[0][
+                                                                 -1])  # delete the final lick of the trial
                     # if the last trial had more than 5 licks
                     if len(np.where(self.timestamps[tastant] >= self.trial_times[tastant][-1])[0]) > 5:
                         self.timestamps[tastant] = np.delete(self.timestamps[tastant], len(
@@ -517,7 +529,8 @@ class StimuliSignals:
         return responses
 
     @staticmethod
-    def calculate_response(bins, start_index, end_index, trial, neuron, tastant, mean_spont, std_spont, binned_spike_times):
+    def calculate_response(bins, start_index, end_index, trial, neuron, tastant, mean_spont, std_spont,
+                           binned_spike_times):
         latency = bins[start_index] - trial  # calculate latency
         duration = bins[end_index] - bins[start_index]
         # calculate magnitude by summing window and dividing by duration
@@ -557,7 +570,7 @@ class StimuliSignals:
                     binned_spike_times, _ = np.histogram(spks, bins=bins)
 
                     trial_response = self.calculate_trial_response(binned_spike_times, bins, trial, neuron, tastant,
-                                                              mean_spont, std_spont)
+                                                                   mean_spont, std_spont)
                     if not trial_response:
                         trial_response = [neuron, tastant, trial, mean_spont, std_spont, np.nan, np.nan, np.nan]
                     allresp.extend(trial_response)
@@ -571,7 +584,9 @@ class StimuliSignals:
         spont_times = self.spont_intervals(
             self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
         )
-        allresp = pd.DataFrame(columns=['Animal', 'Neuron', 'Tastant', 'Trial', 'Spont_m', 'Spont_std', 'Magnitude', 'Latency', 'Duration'])
+        allresp = pd.DataFrame(
+            columns=['Animal', 'Neuron', 'Tastant', 'Trial', 'Spont_m', 'Spont_std', 'Magnitude', 'Latency',
+                     'Duration'])
         for neuron in self.neurons:
             # spont section (std not sem)
             spontbins = []
@@ -614,7 +629,8 @@ class StimuliSignals:
                                 duration = bins[end_index] - bins[start_index]
                                 # calculate magnitude by summing window and dividing by duration
                                 magnitude = binned_spike_times[start_index: end_index + 1].sum() / duration
-                                resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency, duration]
+                                resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency,
+                                        duration]
                                 resp_df = pd.DataFrame([resp], columns=allresp.columns)
                                 trial_response = trial_response.append(resp_df, ignore_index=True)
                                 is_counting = False
@@ -695,7 +711,8 @@ class StimuliSignals:
                 bootpen += (eff_a - boot_alpha) * 100 * scale / eff_a
         return bootpen, eff_a
 
-    def LXL(self, neuron, tastant, stim, neur, dryhist, ndry, lick_max=.150, lick_window=.015, wil_alpha=.05, chi_alpha=.05):
+    def LXL(self, neuron, tastant, stim, neur, dryhist, ndry, lick_max=.150, lick_window=.015, wil_alpha=.05,
+            chi_alpha=.05):
         """Run a lick-by-lick taste response calculation."""
         tastespikes = []
         # get all spike timestamps around tastant activity,
@@ -778,7 +795,8 @@ class StimuliSignals:
         if len(np.where(e < 1)[0]) > 0:  # if any bins are less than one
             for this_bin in np.where(e < 1)[0]:  # merge each bin with the following bin
                 if this_bin == len(e) - 1: this_bin = this_bin - 1  # if the last bin move counter back one
-                e[this_bin + 1], o[this_bin + 1] = e[this_bin + 1] + e[this_bin], o[this_bin + 1] + o[this_bin]  # merge bins
+                e[this_bin + 1], o[this_bin + 1] = e[this_bin + 1] + e[this_bin], o[this_bin + 1] + o[
+                    this_bin]  # merge bins
                 e[this_bin], o[this_bin] = 0, 0
             o = o[np.where(e != 0)[0]]  # remove 0 bins
             e = e[np.where(e != 0)[0]]
@@ -797,15 +815,15 @@ class StimuliSignals:
         # find ILIs long enough to be a spontaneous interval
         spont_indices = np.where(np.diff(licks) >= 10)[0]
         # spontaneous interval start and end times
-        spont_starts = licks[spont_indices]+prespont
-        spont_ends = licks[spont_indices+1]-postspont  # end times
+        spont_starts = licks[spont_indices] + prespont
+        spont_ends = licks[spont_indices + 1] - postspont  # end times
         # get the interval for the beginning, if there is one
-        if licks[0]-start[0] >= 10:
+        if licks[0] - start[0] >= 10:
             spont_starts = np.sort(np.append(spont_starts, 0))
-            spont_ends = np.sort(np.append(spont_ends, licks[0]-postspont))
+            spont_ends = np.sort(np.append(spont_ends, licks[0] - postspont))
         # get the interval for the end, if there is one
-        if stop[0]-licks[-1] >= 10:
-            spont_starts = np.sort(np.append(spont_starts, licks[-1]+prespont))
+        if stop[0] - licks[-1] >= 10:
+            spont_starts = np.sort(np.append(spont_starts, licks[-1] + prespont))
             spont_ends = np.sort(np.append(spont_ends, stop[0]))
         # combine the start and end times into a tuple of tuples
         spont_times = tuple(zip(spont_starts, spont_ends))
