@@ -11,6 +11,7 @@ from nex.nexfile import Reader
 
 from pathlib import Path
 
+
 def find_matching_files(directory: str | Path, match_string: str, recursive=True) -> list:
     """
     Find all files in the specified directory and its subdirectories that match the given pattern.
@@ -41,6 +42,7 @@ def find_matching_files(directory: str | Path, match_string: str, recursive=True
 
     return matching_files
 
+
 def parse_filename(filename):
     # Define the regular expression pattern for the filename
     pattern = r'(?P<animal>[A-Za-z]{3,5}\d{1,2})_(?P<date>\d{4}-\d{2}-\d{2})_(?P<paradigm>RS|SF)'
@@ -63,6 +65,7 @@ def parse_filename(filename):
         # If the match is not successful, return None
         return None
 
+
 def unique_path(directory, filename) -> Path:
     counter = 0
     while True:
@@ -71,9 +74,11 @@ def unique_path(directory, filename) -> Path:
         if not path.exists():
             return path
 
+
 def get_nex(file_path: str | Path):
     reader = Reader(useNumpy=True)
     return reader.ReadNexFile(file_path)
+
 
 if __name__ == "__main__":
     main_dir = Path(r"C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\allfiles")

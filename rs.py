@@ -3,9 +3,11 @@ from data_utils import data_collection
 import pandas as pd
 import pickle
 
+
 def load(file):
     with open(file, "rb") as f:
         return pickle.load(f)
+
 
 def save(file, data):
     with open(file, "wb") as f:
@@ -38,6 +40,7 @@ def save_sessions(data=None):
         five_df.to_excel(writer, 'five_lick', float_format='%.3f', header=True, index=True)
         lxl_df.to_excel(writer, 'lxl', float_format='%.3f', header=True, index=True)
 
+
 datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs')
 
 data = data_collection.DataCollection(datadir)
@@ -53,7 +56,6 @@ for name, file in data.files.items():
 
 resp = pd.concat(dfs, axis=0, ignore_index=False)
 
-
-x=5
+x = 5
 if __name__ == "__main__":
     pass
