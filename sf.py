@@ -43,8 +43,9 @@ def save_sessions(data=None):
         five_df.to_excel(writer, 'five_lick', float_format='%.3f', header=True, index=True)
         lxl_df.to_excel(writer, 'lxl', float_format='%.3f', header=True, index=True)
 
-data = load(r'C:\repos\neuroexplore\exclude\eating_data.pkl')
-dists = [DistanceMatrix(data[filename]) for filename in data.keys()]
+load(r'C:\repos\neuroexplore\exclude\eating_dists.pkl')
+
+
 x=2
 
 # for qv in range(len(qvals)):
