@@ -73,6 +73,7 @@ def check_unique_path(path) -> str:
         counter += 1
     return path
 
+
 def interval(
         lst: Iterable[any], gap: Optional[int] = 1, outer: bool = False
 ) -> list[tuple[Any, Any]]:
@@ -102,6 +103,7 @@ def interval(
             tmp = [v]
     return interv
 
+
 def get_peak_window(time: Iterable[any], peak: float) -> list:
     """
     Returns the index of tracedata centered 1s around the peak flourescent value for
@@ -119,6 +121,7 @@ def get_peak_window(time: Iterable[any], peak: float) -> list:
     window_ind.append(aux.index(min(aux)) - 20)
     window_ind.append(aux.index(min(aux)) + 20)
     return window_ind
+
 
 def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     """
@@ -139,14 +142,16 @@ def get_matched_time(time: np.ndarray, match: np.ndarray | int) -> np.ndarray:
     mins = np.argmin(np.abs(match - time), axis=1)
     return np.array([time[mins[i]] for i in range(len(match))])
 
+
 def vec_to_sq(vec: np.ndarray):
     vec = vec.astype('float')
     sq = int(np.ceil(np.sqrt(vec.size)))
     to_pad = (sq * sq) - vec.size
     if to_pad % 2:
-        return np.pad(vec, (to_pad/2, to_pad/2), mode='constant', constant_values=np.nan).reshape((sq, sq))
+        return np.pad(vec, (to_pad / 2, to_pad / 2), mode='constant', constant_values=np.nan).reshape((sq, sq))
     else:
-        return np.pad(vec, (to_pad-1, 1), mode='constant', constant_values=np.nan).reshape((sq, sq))
+        return np.pad(vec, (to_pad - 1, 1), mode='constant', constant_values=np.nan).reshape((sq, sq))
+
 
 def discrete_mean(arr):
     """Calculate the mean along the axis of a discrete array."""
@@ -154,6 +159,7 @@ def discrete_mean(arr):
     cumsum = np.cumsum(arr)
     cumsum[2:] = cumsum[2:] - cumsum[:-2]
     return np.asarray(cumsum[2 - 1:] / 2, dtype=int)
+
 
 def rolling_average_std(array, window_size=10):
     """
@@ -187,6 +193,24 @@ def rolling_average_std(array, window_size=10):
 
     return np.array(rolling_averages), np.array(rolling_std)
 
+
+def check_diff(arr1: np.ndarray, arr2: np.ndarray, precision: int = 3):
+    if arr1.shape != arr2.shape:
+        raise ValueError('The input arrays must have the same shape.')
+
+    if len(arr1.shape) != 3:
+        raise ValueError('The input arrays must be 3-dimensional.')
+
+    diffs = []
+
+    for i in range(arr1.shape[2]):
+        # Compare slices up to the desired decimal place
+        if not np.allclose(arr1[:, :, i], arr2[:, :, i], atol=10 ** (-precision)):
+            diffs.append(i)
+
+    return diffs
+
+
 def calculate_window_stats(arr):
     """
     Calculate rolling window statistics (average and standard deviation) for a given NumPy array.
@@ -217,3 +241,28 @@ def calculate_window_stats(arr):
             avg[i] = np.nan
             std[i] = np.nan
     return avg, std
+
+
+def to_numpy_objarray(list_of_lists):
+    """
+    Converts a list of lists into a numpy object array, where each element is a numpy array.
+
+    Parameters:
+        list_of_lists (list): A list of lists, where each inner list is intended to be a column vector.
+
+    Returns:
+        numpy.ndarray: A 1D numpy object array, where each element is a numpy array.
+    """
+    # Convert each sublist to a 2D numpy array with a single column
+    array_of_arrays = [np.array(sublist) for sublist in list_of_lists]
+
+    # Create an object array
+    obj_arr = np.zeros((len(array_of_arrays),), dtype=object)
+
+    # Assign each numpy array to the corresponding element in the object array
+    for i in range(len(array_of_arrays)):
+        obj_arr[i] = array_of_arrays[i]
+
+    obj_arr = obj_arr.reshape(-1, 1)
+
+    return obj_arr

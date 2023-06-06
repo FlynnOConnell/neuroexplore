@@ -1,10 +1,9 @@
 <h1> neuroexplore </h1>
 
-Electrophysiological data analysis tools for translating spike-train data into
-statistical models of neural activity and visualizations of neural activity.
+Python translation of original MatLab routines for 
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=?style=plastic&logo=python&logoColor=ffdd54)
-![](https://www.mathworks.com/matlabcentral/images/matlab-file-exchange.svg)
+![Github license](https://img.shields.io/github/license/Naereen/Strapdown.js.svg)
 ![GitHub license](https://badgen.net/github/license/Naereen/Strapdown.js)
 
 

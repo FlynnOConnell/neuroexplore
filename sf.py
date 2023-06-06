@@ -18,7 +18,6 @@ def get_data(_dir):
 #     print(file)
 #     dists.append(DistanceMatrix(file))
 # io.save(r'C:\repos\neuroexplore\exclude\solidfood_dists.pkl', dists)
-
 x = 2
 # load(r'C:\repos\neuroexplore\exclude\eating_dists.pkl')
 

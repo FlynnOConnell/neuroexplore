@@ -44,7 +44,6 @@ def save_sessions(data=None):
 datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs')
 
 data = data_collection.DataCollection(datadir)
-# data.get_data(paradigm='rs',  functions_to_run=['changepoint', 'chisquare', 'baseline', 'ili', 'spont', 'coh'], exclude=None)
 data.get_data(paradigm='rs', functions_to_run=['respstat'])
 
 dfs = []

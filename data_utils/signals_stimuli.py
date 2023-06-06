@@ -290,7 +290,7 @@ class StimuliSignals:
                     self.timestamps[neuron][
                         np.where((self.timestamps[neuron] >= self.trial_times[self.drylick + '_lxl'][i]) & (
                                 self.timestamps[neuron] < (
-                                    self.trial_times[self.drylick + '_lxl'][i] + self.params.lick_max)))] -
+                                self.trial_times[self.drylick + '_lxl'][i] + self.params.lick_max)))] -
                     self.trial_times[self.drylick + '_lxl'][i])
             # number of drylick trial-related neuron spikes
             ndry = len(dryspikes)
