@@ -10,6 +10,9 @@ from .file_handling import find_matching_files, parse_filename, get_nex
 from . import signals_food as sf
 from . import signals_stimuli as ss
 from params import Params
+import multiprocessing as mp
+from functools import partial
+
 
 def concat_dataframe_to_dataframe(df1, df2):
     """
@@ -56,6 +59,7 @@ def concat_dataframe_to_dataframe(df1, df2):
     updated_df = updated_df[df1.columns]
     return updated_df
 
+
 def concat_series_to_dataframe(df, series):
     # Find the columns that are in the series but not in the dataframe
     new_columns = series.index.difference(df.columns)
@@ -71,10 +75,19 @@ def concat_series_to_dataframe(df, series):
 
     return updated_df
 
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
 class DataCollection:
     """
         Class for collecting data from multiple Signals data objects.
     """
+
     def __init__(self, directory: str | Path, recursive: bool = False, opto: bool = False):
 
         self.files = {}
@@ -95,12 +108,7 @@ class DataCollection:
     def __repr__(self):
         return f'{len(self.data_files)} files'
 
-    @property
-    def num_files(self):
-        return len(self.files)
-
-    # for multiple files
-    def get_data(self, paradigm='SF', num_files=None, functions_to_run=None, exclude=None):
+    def get_data(self, paradigm='rs', num_files=None, functions_to_run=None, exclude=None):
         """
         Instantiate Signals class for given paradigm. If num_files is not None, only the first num_files will be used.
         Sorted by paradigm, then filename.
@@ -111,25 +119,63 @@ class DataCollection:
             self.data_files = self.data_files[:num_files]
         for file in self.data_files:
             if file not in exclude:
-                #try:
+                try:
                     nexfile = get_nex(self.directory / file)
                     if paradigm in ['sf', 'SF']:
-                        data = sf.EatingSignals(nexfile, file, self.opto,)
-                    elif paradigm in  ['rs', 'RS']:
+                        data = sf.EatingSignals(nexfile, file, self.opto, )
+                    elif paradigm in ['rs', 'RS']:
                         data = ss.StimuliSignals(nexfile, file)
                         if functions_to_run:
                             data.run_stats(functions_to_run)
                     else:
                         raise ValueError(f'Paradigm {paradigm} not found.')
                     self.files[file] = data
-                #except Exception as e:
-                #    exc_type, exc_value, exc_traceback = sys.exc_info()
-                #    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                #    tb_lines = ''.join(tb_str)
-                #    self.errors[file] = f"{e}\n{tb_lines}"
+                    print(f'Loaded {file}')
+                except Exception as e:
+                    exc_type, exc_value, exc_traceback = sys.exc_info()
+                    tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                    tb_lines = ''.join(tb_str)
+                    self.errors[file] = f"{e}\n{tb_lines}"
+
+    def process_file(self, file, functions_to_run, exclude, ):
+        try:
+            nexfile = get_nex(self.directory / file)
+            data = ss.StimuliSignals(nexfile, file)
+            if functions_to_run:
+                data.run_stats(functions_to_run)
+            print(f'Loaded {file}')
+            return file, data
+        except Exception as e:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            tb_str = traceback.format_exception(exc_type, exc_value, exc_traceback)
+            tb_lines = ''.join(tb_str)
+            return file, f"{e}\n{tb_lines}"
+
+    def get_data_mp(self,  filenames, num_files=None, functions_to_run='all', exclude=None):
+        """
+        Instantiate Signals class for given paradigm. If num_files is not None, only the first num_files will be used.
+        Sorted by paradigm, then filename.
+        """
+        if exclude is None:
+            exclude = []
+        if num_files:
+            filenames = filenames[:num_files]
+
+        with mp.Pool(mp.cpu_count()) as pool:
+            process_file_partial = partial(self.process_file,
+                                           functions_to_run=functions_to_run, exclude=exclude)
+            results = pool.map(process_file_partial, filenames)
+
+        for result in results:
+            if result is not None:
+                file, data = result
+                if isinstance(data, str):  # if it's a string, it's an error message
+                    self.errors[file] = data
+                else:  # otherwise, it's data
+                    self.files[file] = data
 
     # for single file
-    def get_data_by_filename(self, filenames, paradigm='sf', functions_to_run=None,):
+    def get_data_by_filename(self, filenames, paradigm='sf', functions_to_run=None, ):
         """
         Instantiate Signals class for given filename(s).
         filenames can be a single string or an iterable of strings.
@@ -142,7 +188,7 @@ class DataCollection:
                 try:
                     nexfile = get_nex(self.directory / file)
                     if paradigm in ['sf', 'SF']:
-                        data = sf.EatingSignals(nexfile, file, self.opto,)
+                        data = sf.EatingSignals(nexfile, file, self.opto, )
                         self.files[file] = data
                     elif paradigm in ['rs', 'RS']:
                         data = ss.StimuliSignals(nexfile, file)
@@ -179,7 +225,7 @@ class DataCollection:
         self.stats = pd.concat([self.info_df, self.means, self.sems, self.std], axis=1)
 
     @staticmethod
-    def output(data, output_dir, filename='stats', sheet_name='Sheet1',):
+    def output(data, output_dir, filename='stats', sheet_name='Sheet1', ):
         # import here to avoid circular import and for clarity
         from analysis import output
         file = output.SaveSignals(data, output_dir)

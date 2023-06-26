@@ -40,7 +40,6 @@ class EatingSignals:
 
         self.event_df = self.get_event_df()
         self.neuron_df = self.build_neuron_df()
-        self.spont_stats = self.get_spont_mean_std()
         assert 'BLW_bout_Int' not in self.neuron_df['event'].unique(), 'BLW_bout_Int should not be in neuron_df'
 
     def __repr__(self) -> str:
@@ -108,6 +107,9 @@ class EatingSignals:
         self.intervals = {k.rstrip('0_2') if k.endswith('0_2') else k: v for k, v in self.intervals.items() if
                           not k.endswith('-2')}
         self.intervals = {key_mapping.get(key, key): value for key, value in self.intervals.items()}
+
+    def get_spontaneous_times(self, sort, inner_gap, pad=10):
+        return self.get_spont_intervs(sort, inner_gap, pad)
 
     def build_neuron_df(self):
         results = []
@@ -187,9 +189,14 @@ class EatingSignals:
         intervals_df['event'] = intervals_df['event'].map(INCORRECT_NAME_MAPPING).fillna(intervals_df['event'])
         return intervals_df
 
-    @staticmethod
-    def get_spont_intervs(df, spont_gap=10, pre_event_gap=3):
+    def get_spont_intervs(self, sort=True, spont_gap=16, pre_event_gap=3, ts=False):
+        if self.event_df is None:
+            raise ValueError("Event dataframe is not initialized. Call get_event_df() first.")
+
+        df = self.event_df
         spont_list = []
+
+        df = df.sort_values(by='start_time')
 
         # Loop through dataframe rows
         for i in range(1, df.shape[0]):
@@ -198,34 +205,45 @@ class EatingSignals:
 
             # Check if there's enough gap for a spontaneous event
             if curr_event['start_time'] - prev_event['end_time'] >= spont_gap:
-                # Add spontaneous event starting 3 seconds after the previous event and ending just before the current event
+                # Add spontaneous event starting 3 seconds after the previous event and ending just before the
+                # current event
                 spont_list.append({'event': 'spont',
-                                   'start_time': prev_event['end_time'] + pre_event_gap,
-                                   'end_time': curr_event['start_time']})
+                                   'start_time': prev_event['end_time'] + 3,
+                                   'end_time': curr_event['start_time'] - 3
+                                   })
 
         # Create a dataframe from the list
         return pd.DataFrame(spont_list)
 
-    def get_spont_mean_std(self):
+    def get_spont_stamps(self, spont_intervs):
         # Create an empty DataFrame to store results
-        result_df = pd.DataFrame(columns=['neuron', 'mean_spike_rate', 'std_spike_rate'])
+        result_df = pd.DataFrame(columns=['neuron', 'mean_spike_rate', 'std_spike_rate', 'sem_spike_rate'])
 
         for neuron in self.neurons:
             timestamps = self.neurons[neuron]
             spont_intervs = self.get_spont_intervs(self.event_df)
             spont_spike_rates = []
+            bin_width = 1.0  # Width of bins in seconds
             for _, row in spont_intervs.iterrows():
                 spike_times_within_interval = get_spike_times_within_interval(
                     timestamps, row['start_time'], row['end_time'])
-                spike_rate = len(spike_times_within_interval) / (row['end_time'] - row['start_time'])
-                spont_spike_rates.append(spike_rate)
+                num_bins = int((row['end_time'] - row['start_time']) / bin_width)
+                if (row['end_time'] - row['start_time']) % bin_width >= bin_width / 2:
+                    num_bins += 1  # Round up if remaining interval is at least half the bin width
+                spikes_per_bin, _ = np.histogram(spike_times_within_interval, bins=num_bins)
+                spike_rates_per_bin = spikes_per_bin / bin_width  # Convert to rates
+                spont_spike_rates.extend(spike_rates_per_bin)
 
-            # Calculate mean and standard deviation of spontaneous spike rates for current neuron
+            # Calculate mean, standard deviation and standard error of the mean of spontaneous spike rates for
+            # current neuron
             mean_spike_rate = np.mean(spont_spike_rates)
             std_spike_rate = np.std(spont_spike_rates)
-            new_row = pd.DataFrame({'neuron': neuron,
-                                    'mean_spike_rate': mean_spike_rate,
-                                    'std_spike_rate': std_spike_rate}, index=[0])
+            sem_spike_rate = std_spike_rate / np.sqrt(len(spont_spike_rates))
+
+            new_row = pd.DataFrame({'neuron': [neuron],
+                                    'mean_spike_rate': [mean_spike_rate],
+                                    'std_spike_rate': [std_spike_rate],
+                                    'sem_spike_rate': [sem_spike_rate]})
             # Add the results to the dataframe
             result_df = pd.concat([result_df, new_row], ignore_index=True)
         return result_df

@@ -21,6 +21,7 @@ class StimuliSignals:
         self.filename = filename
         self.animal, self.date, _ = parse_filename(filename)
         self.ensemble = False
+        self.errors = {}
         self.params = Params()
         self.lick = 'Lick'
         self.rinse = 'Rinse'
@@ -44,7 +45,7 @@ class StimuliSignals:
     @property
     def fl_trials(self):
         try:
-            trials = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Trial Count')
+            trials = self.final_df['5L'].pivot_table(index=['File', 'Neuron'], columns='Stimulus', values='Trial Count')
             trials.insert(0, 'trials', ['trials' for x in range(trials.shape[0])])
             return trials
         except KeyError:
@@ -53,7 +54,7 @@ class StimuliSignals:
     @property
     def fl_adjmags(self):
         try:
-            mag = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Adj. Magnitude')
+            mag = self.final_df['5L'].pivot_table(index=['File', 'Neuron'], columns='Stimulus', values='Adj. Magnitude')
             mag.insert(0, 'adj.magnitude', ['adj.magnitude' for x in range(mag.shape[0])])
             return mag
         except KeyError:
@@ -62,7 +63,7 @@ class StimuliSignals:
     @property
     def fl_baseline(self):
         try:
-            baseline = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Baseline')
+            baseline = self.final_df['5L'].pivot_table(index=['File', 'Neuron'], columns='Stimulus', values='Baseline')
             baseline.insert(0, 'baseline', ['baseline' for x in range(baseline.shape[0])])
             return baseline
         except KeyError:
@@ -71,7 +72,7 @@ class StimuliSignals:
     @property
     def fl_latency(self):
         try:
-            latency = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Latency')
+            latency = self.final_df['5L'].pivot(index=['File', 'Neuron'], columns='Stimulus', values='Latency')
             latency.insert(0, 'latency', ['latency' for x in range(latency.shape[0])])
             return latency
         except KeyError:
@@ -80,7 +81,7 @@ class StimuliSignals:
     @property
     def fl_duration(self):
         try:
-            duration = self.final_df['5L'].pivot(index='Neuron', columns='Stimulus', values='Duration')
+            duration = self.final_df['5L'].pivot(index=['File', 'Neuron'], columns='Stimulus', values='Duration')
             duration.insert(0, 'duration', ['duration' for x in range(duration.shape[0])])
             return duration
         except KeyError:
@@ -215,9 +216,17 @@ class StimuliSignals:
         for function_name in functions_to_run:
             if 'all' in function_name:
                 for func in function_map:
-                    function_map[func]()
+                    try:
+                        function_map[func]()
+                    except Exception as e:
+                        print(f"Error in function {func}: {e}")
+                        self.errors[func] = e
             elif function_name in function_map:
-                function_map[function_name]()
+                try:
+                    function_map[function_name]()
+                except Exception as e:
+                    print(f"Error in function {function_name}: {e}")
+                    self.errors[function_name] = e
             else:
                 print(f"Function '{function_name}' not found.")
 
@@ -273,8 +282,12 @@ class StimuliSignals:
                     (self.params.trial_end + self.params.base) / self.params.bin5L + 1)))[
                     0]  # create histogram of spikes
                 baselines.append(np.mean(allbins[0:20]) / (self.params.bin5L * trial_count))
-            all_baseline.append({'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': np.mean(
-                baselines), 'Baseline STDEV': np.std(baselines, ddof=1)})
+            mean = np.mean(baselines)
+            std_dev = np.std(baselines, ddof=1)
+            sem = std_dev / np.sqrt(len(baselines))  # calculate the standard error of the mean
+            all_baseline.append(
+                {'File Name': self.filename, 'Neuron': neuron, 'Baseline Mean': mean, 'Baseline STDEV': std_dev,
+                 'Baseline SEM': sem})
         self.final_df['baseline'] = pd.DataFrame(all_baseline)
 
     def chisquareLXL(self):
@@ -384,7 +397,7 @@ class StimuliSignals:
                         this_5L['CP' + str(n + 1)] = change_times[n]
                     else:
                         this_5L['CP' + str(n + 1)] = f'{len(change_times)} change points found'
-                file_5L = file_5L.append(this_5L, ignore_index=True)
+                file_5L = pd.concat([file_5L, pd.DataFrame(this_5L)], ignore_index=True)
         self.final_df['5L'] = file_5L
 
     def coherence(self):
@@ -426,10 +439,9 @@ class StimuliSignals:
                     six), max(ten), np.mean(four), np.mean(six), np.mean(ten)]
             else:  # if not coherent, nan
                 self.all_responses[neuron]['COH'] = False
-                coh_data = coh_data.append(
-                    [pd.Series(dtype='float64')], ignore_index=True)
+                coh_data = pd.concat([coh_data, pd.DataFrame(columns=coh_data.columns)], ignore_index=True)
                 coh_data.loc[len(coh_data) - 1, 0:2] = [self.filename, neuron]
-        self.final_df['COH'] = pd.DataFrame(coh_data)
+        self.final_df['COH'] = coh_data
 
     def ili(self):
         all_ILIs = []
@@ -538,8 +550,10 @@ class StimuliSignals:
         resp = [neuron, tastant, trial, mean_spont, std_spont, magnitude, latency, duration]
         return resp
 
-    def calculate_statistics(self, binsize=1):
+    def calculate_statistics(self, binsize=1, run=False):
         """Calculate response statistics for each neuron."""
+        if not run:
+            return None
 
         spont_times = self.spont_intervals(
             self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
@@ -566,7 +580,10 @@ class StimuliSignals:
                 for trial in trials:
 
                     spks = self.get_spike_times_within_interval(self.timestamps[neuron], trial, trial + 4)
-                    bins = np.arange(spks.min(), spks.max() + 0.1, 0.1)
+                    try:
+                        bins = np.arange(spks.min(), spks.max() + 0.1, 0.1)
+                    except ValueError:
+                        continue
                     binned_spike_times, _ = np.histogram(spks, bins=bins)
 
                     trial_response = self.calculate_trial_response(binned_spike_times, bins, trial, neuron, tastant,
@@ -581,12 +598,15 @@ class StimuliSignals:
     def temp_calculate_statistics(self, binsize=1):
         """Calculate response statistics for each neuron."""
 
-        spont_times = self.spont_intervals(
-            self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
-        )
+        trial_response = None
+        tastant_response = None
         allresp = pd.DataFrame(
             columns=['Animal', 'Neuron', 'Tastant', 'Trial', 'Spont_m', 'Spont_std', 'Magnitude', 'Latency',
                      'Duration'])
+
+        spont_times = self.spont_intervals(
+            self.timestamps[self.lick], self.timestamps['Start'], self.timestamps['Stop'], 3, 1
+        )
         for neuron in self.neurons:
             # spont section (std not sem)
             spontbins = []
@@ -632,7 +652,7 @@ class StimuliSignals:
                                 resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency,
                                         duration]
                                 resp_df = pd.DataFrame([resp], columns=allresp.columns)
-                                trial_response = trial_response.append(resp_df, ignore_index=True)
+                                trial_response = pd.concat([trial_response, resp_df], ignore_index=True)
                                 is_counting = False
 
                     # check if the counting ended with the last window
@@ -644,15 +664,15 @@ class StimuliSignals:
                         resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, magnitude, latency,
                                 duration]
                         resp_df = pd.DataFrame([resp], columns=allresp.columns)
-                        trial_response = trial_response.append(resp_df, ignore_index=True)
+                        trial_response = pd.concat([trial_response, resp_df], ignore_index=True)
 
                     if trial_response.empty:
                         resp = [self.animal, neuron, tastant, trial, mean_spont, std_spont, np.nan, np.nan,
                                 np.nan]
                         resp_df = pd.DataFrame([resp], columns=allresp.columns)
-                        trial_response = trial_response.append(resp_df, ignore_index=True)
-                tastant_response = tastant_response.append(trial_response, ignore_index=True)
-            allresp = allresp.append(tastant_response, ignore_index=True)
+                        trial_response = pd.concat([trial_response, resp_df], ignore_index=True)
+                tastant_response = pd.concat([tastant_response, trial_response], ignore_index=True)
+            allresp = pd.concat([allresp, tastant_response], ignore_index=True)
         return allresp
 
     def get_5L_penalty(self, neur, bootstrap_n=1000, boot_alpha=.05, alpha_tol=.005):
@@ -731,7 +751,7 @@ class StimuliSignals:
             tastefire = tasteobs / len(stim) / lick_window
             respmag = np.mean(np.absolute(tastefire - dryfire))  # response magnitude
             resptype = 0
-            wstat, pval = stats.wilcoxon(dryfire, tastefire)  # run wilcoxon
+            wstat, pval, _ = stats.wilcoxon(dryfire, tastefire)  # run wilcoxon
             if pval < wil_alpha:  # if wilcoxon is significant, add response type
                 if sum(tastefire - dryfire) > 0:
                     resptype = 'Excitatory'

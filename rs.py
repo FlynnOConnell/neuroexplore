@@ -9,20 +9,20 @@ def load(file):
         return pickle.load(f)
 
 
-def save(file, data):
+def save(file, save_data):
     with open(file, "wb") as f:
-        pickle.dump(data, f)
+        pickle.dump(save_data, f)
         print('saved')
 
 
-def save_sessions(data=None):
-    if not data:
-        data = load(r'C:\Users\Flynn\OneDrive\Desktop\temp\save.pkl')
+def save_sessions(session_data=None):
+    if not session_data:
+        session_data = load(r'C:\Users\Flynn\OneDrive\Desktop\temp\save.pkl')
 
     all_five = []
     all_lxl = []
 
-    for filename, signal in data.items():
+    for filename, signal in session_data.items():
         fl_session = pd.concat(
             [signal.fl_baseline, signal.fl_adjmags, signal.fl_duration, signal.fl_latency, signal.fl_duration,
              signal.fl_trials], axis=1)
@@ -41,20 +41,5 @@ def save_sessions(data=None):
         lxl_df.to_excel(writer, 'lxl', float_format='%.3f', header=True, index=True)
 
 
-datadir = Path(r'C:\Users\Flynn\Dropbox\Lab\SF\nexfiles\rs')
-
-data = data_collection.DataCollection(datadir)
-data.get_data(paradigm='rs', functions_to_run=['respstat'])
-
-dfs = []
-resp = pd.DataFrame()
-for name, file in data.files.items():
-    sig = file.spont_stats
-    if not sig.empty:
-        dfs.append(sig)
-
-resp = pd.concat(dfs, axis=0, ignore_index=False)
-
-x = 5
 if __name__ == "__main__":
-    pass
+    files = load(r"C:\Users\Flynn\Dropbox\Lab\SF\data\save.pkl")
