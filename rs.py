@@ -6,7 +6,7 @@ import pickle
 
 def load(file):
     with open(file, "rb") as f:
-        return pickle.load(f)
+        return pickle.load(f, fix_imports=True)
 
 
 def save(file, save_data):
