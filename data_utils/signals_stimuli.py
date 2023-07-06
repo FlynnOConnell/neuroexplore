@@ -14,7 +14,6 @@ from .file_handling import parse_filename
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
-
 class StimuliSignals:
     def __init__(self, nexdata: dict, filename: str) -> None:
         self.nex = nexdata
