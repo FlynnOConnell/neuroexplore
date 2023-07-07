@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 import numpy as np
 from pathlib import Path
@@ -6,12 +5,12 @@ import metricspace as ms
 from data_utils.io import load, save
 
 
-def get_anear(pw_dists, n_samples):
+def get_anear(input_dists, numsamples):
     nq = 28
-    anear_mat = np.zeros((len(n_samples), len(n_samples), nq))
+    q_anear = np.zeros((len(numsamples), len(numsamples), nq))
     for q in range(nq):
-        anear_mat[:, :, q] = ms.distclust(pw_dists[:, :, q], n_samples)
-    return anear_mat
+        q_anear[:, :, q] = ms.distclust(input_dists[:, :, q], numsamples)
+    return q_anear
 
 
 if __name__ == "__main__":
