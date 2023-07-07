@@ -1,6 +1,5 @@
 <h1> neuroexplore </h1>
-
-Python translation of original MatLab routines for 
+Data analysis utilities for electrophysiological datasets.
 
 ![Python](https://img.shields.io/badge/python-3670A0?style=?style=plastic&logo=python&logoColor=ffdd54)
 ![Github license](https://img.shields.io/github/license/Naereen/Strapdown.js.svg)
