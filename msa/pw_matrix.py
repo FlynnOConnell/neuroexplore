@@ -14,13 +14,11 @@ def get_anear(input_dists, numsamples):
 
 
 if __name__ == "__main__":
-    home = Path.home()
     anear = {}
-    data = load(home / "data/rs/respstim_dists_0705.pkl")
+    data = load("/home/flynn/repos/neuroexplore/msa/data/res/repstim_distances_0707.pkl")
     for filename, filedata in data.items():
-        for neuron in filedata.keys():
-            pw_dists = filedata[neuron]
-            n_samples = filedata['n_samples']
-            anear_mat = get_anear(pw_dists, n_samples)
-            anear[filename] = anear_mat
-
+        neuron_dists = filedata[0]
+        nsam = filedata[1]
+        for neuron, dists in neuron.items():
+            anear_mat = get_anear(dists, nsam)
+            anear[filename][neuron] = anear_mat

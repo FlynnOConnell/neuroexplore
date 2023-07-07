@@ -1,5 +1,5 @@
 import pickle
-import os
+from pathlib import Path
 
 
 def load(file):
@@ -8,8 +8,9 @@ def load(file):
 
 
 def save(file, data):
-    directory = os.path.dirname(file)
-    os.makedirs(directory, exist_ok=True)
+    p = Path(file)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Saving file to {p.resolve()}")
 
     with open(file, "wb") as f:
         pickle.dump(data, f)

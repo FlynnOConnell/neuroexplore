@@ -1,6 +1,5 @@
 
 # User-specific stuff
-
 exclude/**
 
 .idea/**
@@ -71,3 +70,4 @@ __pycache__/*
 .git/*
 .asv
 
+!/msa/data/

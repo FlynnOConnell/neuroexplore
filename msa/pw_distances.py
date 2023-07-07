@@ -47,17 +47,17 @@ def get_data(fullfile):
 
     num_samples = [len(evs[ev]) for ev in evs.keys()]
     file_data = {}
-    for neuron in neurons:
+    for neuron_str in neurons:
         thisneur = []
         for stim, ts_list in evs.items():
             this_stim = []
             for ts in ts_list:
-                neurodata = np.array(neurons[neuron])
+                neurodata = np.array(neurons[neuron_str])
                 spks = np.where((neurodata >= ts) & (neurodata <= ts + 2))[0]
-                adjusted_spks = neurons[neuron][spks] - ts
+                adjusted_spks = neurons[neuron_str][spks] - ts
                 this_stim.append(adjusted_spks)
             thisneur.extend(this_stim)
-        file_data[neuron] = thisneur
+        file_data[neuron_str] = thisneur
 
     return file_data, num_samples
 
@@ -90,4 +90,5 @@ if __name__ == "__main__":
         print(f"Finished {filename}")
     print(f"Complete with {len(errors)} errors")
     # %% SAVE DISTANCES
-    save("data/res/repstim_distances_0707.pkl", dists)
+    savedir = Path.home() / "data/rs"
+    save(savedir / "distances.pkl", dists)
