@@ -1,6 +1,5 @@
 from __future__ import annotations
 import numpy as np
-from pathlib import Path
 import metricspace as ms
 from data_utils.io import load, save
 
@@ -14,11 +13,19 @@ def get_anear(input_dists, numsamples):
 
 
 if __name__ == "__main__":
-    anear = {}
-    data = load("/home/flynn/repos/neuroexplore/msa/data/res/repstim_distances_0707.pkl")
+    errors = []
+    data = load("/home/flynn/data/res/rs_distances.pkl")
+    anear = {filename: {} for filename, _ in data.items()}
     for filename, filedata in data.items():
         neuron_dists = filedata[0]
         nsam = filedata[1]
-        for neuron, dists in neuron.items():
-            anear_mat = get_anear(dists, nsam)
+        for neuron, dists in neuron_dists.items():
+            try:
+                anear_mat = get_anear(dists, nsam)
+            except Exception as e:
+                errors.append((filename, neuron, e))
+                print(f"Error with {filename} {neuron}")
+                continue
             anear[filename][neuron] = anear_mat
+    save("/home/flynn/data/res/anear.pkl", anear)
+    x = 5

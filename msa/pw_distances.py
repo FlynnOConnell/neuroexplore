@@ -10,18 +10,6 @@ from data_utils.io import load, save
 qvals = np.concatenate(([0], 2 ** np.arange(-4, 9.5, 0.5)))
 
 
-def get_info(conf_matrix):
-    nq = 28
-    h = np.zeros(nq)
-    mat_ja = np.zeros(nq)
-    mat_tp = np.zeros(nq)
-    for q in range(nq):
-        total = np.sum(conf_matrix[:, :, q])
-        mat_prob = conf_matrix[:, :, q] / total
-        h[q] = ms.tblxinfo(mat_prob)
-        mat_ja[q] = ms.tblxbi(conf_matrix[:, :, q], 'ja', None)
-        mat_tp[q] = ms.tblxbi(conf_matrix[:, :, q], 'tr', 0)
-    return h, mat_ja, mat_tp
 
 
 def get_data(fullfile):
