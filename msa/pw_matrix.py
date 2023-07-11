@@ -14,7 +14,7 @@ def get_anear(input_dists, numsamples):
 
 if __name__ == "__main__":
     errors = []
-    data = load("/home/flynn/data/res/rs_distances.pkl")
+    data = load("/home/flynn/data/res/distances.pkl")
     anear = {filename: {} for filename, _ in data.items()}
     for filename, filedata in data.items():
         neuron_dists = filedata[0]
