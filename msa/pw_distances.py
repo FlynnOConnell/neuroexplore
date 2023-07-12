@@ -9,7 +9,7 @@ from data_utils.io import load, save
 qvals = np.concatenate(([0], 2 ** np.arange(-4, 9.5, 0.5)))
 
 
-def get_data(fullfile):
+def get_data(fullfile, t=2):
     tc_events = ["T3_Citric_Acid", "T3_MSG", "T3_NaCl", "T3_Quinine", "T3_Sucrose"]
     reader = Reader(useNumpy=True)
     nexdata = reader.ReadNexFile(str(fullfile))
@@ -19,9 +19,9 @@ def get_data(fullfile):
     for var in nexdata['Variables']:
         if var['Header']['Type'] == 0:
             neurons[var['Header']['Name']] = var['Timestamps']
-            # neurons.append(var['Header']['Name'])
-        elif var['Header']['Type'] == 1 and var['Header']['Name'] in tc_events:
             events[var['Header']['Name']] = var['Timestamps']
+        elif var['Header']['Type'] == 1 and var['Header']['Name'] in tc_events:
+            pass
 
     evs = {ev: [] for ev in events.keys()}
     for event, tstamps in events.items():
@@ -38,7 +38,7 @@ def get_data(fullfile):
             this_stim = []
             for ts in ts_list:
                 neurodata = np.array(neurons[neuron_str])
-                spks = np.where((neurodata >= ts) & (neurodata <= ts + 2))[0]
+                spks = np.where((neurodata >= ts) & (neurodata <= ts + t))[0]
                 adjusted_spks = neurons[neuron_str][spks] - ts
                 this_stim.append(adjusted_spks)
             thisneur.extend(this_stim)
@@ -47,33 +47,34 @@ def get_data(fullfile):
     return file_data, num_samples
 
 
-if __name__ == "__main__":
-    files = {}
-    for file in Path.home().glob("data/rs/*.nex"):
-        try:
-            data, nsam = get_data(file)
-            files[file.stem] = [data, nsam]
-        except Exception as e:
-            print(f"Error with {file} \n"
-                  f"{e}")
-            continue
-        x = 0
-    # %% COMPUTE PAIRWISE DISTANCES
-    dists = {}
-    errors = {}
-    for filename, session_data in files.items():
-        # session_data[0] is the dict of neurons
-        # session_data[1] is the number of samples
-        all_neuron_cspks = session_data[0]
-        neuron_distances = {}
-        for neuron, spikes in all_neuron_cspks.items():
+if "__main__" == __name__:
+    tvals = [0.5, 1, 1.5, 2]
+    files = {t: {} for t in tvals}
+
+    for t in tvals:
+        for file in Path.home().glob("data/rs/*.nex"):
             try:
-                neuron_distances[neuron] = ms.spkd(spikes, qvals)
+                data, nsam = get_data(file, t)
+                files[t][file.stem] = [data, nsam]
             except Exception as e:
-                errors[filename][neuron] = e
-        dists[filename] = (neuron_distances, session_data[1])
-        print(f"Finished {filename}")
-    print(f"Complete with {len(errors)} errors")
-    # %% SAVE DISTANCES
-    savedir = Path.home() / "data/rs"
-    save(savedir / "distances.pkl", dists)
+                print(f"Error with {file} at t={t}\n"
+                      f"{e}")
+                continue
+
+    # %% COMPUTE PAIRWISE DISTANCES
+    dists = {t: {} for t in tvals}
+    errors = {t: {} for t in tvals}
+
+    for t in tvals:
+        for filename, session_data in files[t].items():
+            all_neuron_cspks = session_data[0]
+            neuron_distances = {}
+            for neuron, spikes in all_neuron_cspks.items():
+                try:
+                    neuron_distances[neuron] = ms.spkd(spikes, qvals)
+                except Exception as e:
+                    errors[t][filename][neuron] = e
+            dists[t][filename] = (neuron_distances, session_data[1])
+            print(f"Finished {filename} for t={t}")
+    savedir = Path.home() / "data/res"
+    save(savedir / "rs_distances.pkl", dists)
