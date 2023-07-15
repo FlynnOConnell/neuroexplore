@@ -114,6 +114,7 @@ overlap = .5  # percent of 1 (1=100%, .5 (50%) default value
 coh_alpha = .01  # maximum p-value to be considered significant
 cohbins = 3  # number of significant bins for cell to be considered coherent
 
+
 # %% Functions
 
 def fdr(pvals, q, stimuli):
@@ -134,6 +135,7 @@ def fdr(pvals, q, stimuli):
     fdr_data.insert(2, 'sigs', sigs)
     fdr_data.insert(2, 'pN', pN)
     return fdr_data
+
 
 def f_test(x, y):
     """Runs f_test to compare variances."""
@@ -178,7 +180,6 @@ def binmerge(expected, observed):
         o = o[np.where(e != 0)[0]]
         e = e[np.where(e != 0)[0]]
     return e, o
-
 
 
 def spont_intervals(licks, start, stop, prespont, postspont):
