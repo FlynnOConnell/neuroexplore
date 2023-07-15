@@ -76,7 +76,6 @@ def concat_series_to_dataframe(df, series):
     return updated_df
 
 
-
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
@@ -151,7 +150,7 @@ class DataCollection:
             tb_lines = ''.join(tb_str)
             return file, f"{e}\n{tb_lines}"
 
-    def get_data_mp(self,  filenames, num_files=None, functions_to_run='all', exclude=None):
+    def get_data_mp(self, filenames, num_files=None, functions_to_run='all', exclude=None):
         """
         Instantiate Signals class for given paradigm. If num_files is not None, only the first num_files will be used.
         Sorted by paradigm, then filename.

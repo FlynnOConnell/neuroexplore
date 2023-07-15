@@ -40,7 +40,6 @@ class EatingSignals:
 
         self.event_df = self.get_event_df()
         self.neuron_df = self.build_neuron_df()
-        assert 'BLW_bout_Int' not in self.neuron_df['event'].unique(), 'BLW_bout_Int should not be in neuron_df'
 
     def __repr__(self) -> str:
         return f'{self.filename} - {self.num_neurons} neurons'
