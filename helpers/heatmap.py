@@ -1,107 +1,163 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Apr  6 13:18:56 2021
-
-@author: Di Lorenzo Tech
-
-This script will generate heatmaps for eating events. Just put your filename, and hit go!
-No need to have neuroexplorer open for this
-
-"""
 import numpy as np
 import seaborn as sb
 import matplotlib.pyplot as plt
-import nex.nexfile as nex
-import sys
-import os
+from scipy.ndimage import gaussian_filter
+from matplotlib import rcParams
 
-# File to analyze
-file = r'R:\Iris\trial\SFN14_2019-03-29_SF.nex'
-
-# indicate the names of the intervals which you want included in the heatmap
-sf_events = (
-    'Spont',
-    'BLW_bout_Int',
-    'FLW_bout_Int',
-    'FRW_bout_Int',
-    'BRW_bout_Int',
-    'e_FR',
-    'e_BR',
-    'e_FL',
-    'e_BL',
+rcParams.update(
+    {
+        "font.weight": "bold",
+        "axes.labelweight": "bold",
+        "xtick.major.width": "1.3",
+        "axes.facecolor": "w",
+        "axes.labelsize": 10,
+        "lines.linewidth": 1,
+    }
 )
 
-binsize = .1  # binsize for binning spikes (seconds)
-end = 6  # how long after interval start to display (Seconds)
-start = -1  # how long before the interval start to display (seconds)
-padding = 1  # space between each event (vertically) on the graph
+def get_largest_size(df):
+    well_ts_diffs = df['well_ts'].apply(lambda x: max(np.array(x)) - min(np.array(x)) if len(np.array(x)) > 0 else 0)
+    eat_ts_diffs = df['eat_ts'].apply(lambda x: max(np.array(x)) - min(np.array(x)) if len(np.array(x)) > 0 else 0)
+    size = max(max(well_ts_diffs), max(eat_ts_diffs))  # max difference in timestamps
+    return size
 
-# Open NEXfile to get data
-data = nex.Reader(useNumpy=True).ReadNexFile(file)
 
-# Initializing data containers
-intervals = {}
-neurons = ()
-timestamps = {}
+def get_largest_size_stretch(df, column):
+    ts_diffs = df[column].apply(lambda x: max(np.array(x)) - min(np.array(x)) if len(np.array(x)) > 0 else 0)
+    size = max(ts_diffs)  # max difference in timestamps
+    return size
 
-# populate data containers
-for var in data['Variables']:
-    if var['Header']['Type'] == 2 and var['Header']['Name'] in sf_events:
-        intervals[var['Header']['Name']] = var['Intervals']
-    if var['Header']['Type'] == 0:
-        neurons = neurons + tuple([var['Header']['Name']])
-        timestamps[var['Header']['Name']] = var['Timestamps']
 
-for neuron in neurons:
-    # intialize data containers
-    neur = timestamps[neuron]
-    allhist = []
-    heatmap_data = {}
-    lengths = [0]
-    all_data = np.empty((0, int((end - start) / binsize)))
-    for key in sf_events:  # for each event
-        # get list of intervals
-        intervs = list(zip(intervals[key][0], intervals[key][1]))
+def sf_heatmap(df, binsize=0.1, padding=1, cmap='plasma', sigma=0):
+    # Get the largest size for bins
+    largest_size_of_interval = get_largest_size(df)
+
+    # Prepare subplots
+    fig, axs = plt.subplots(1, 2, sharey=True, figsize=(20, 10))
+
+    vmin = np.inf  # Initialize minimum value
+    vmax = -np.inf  # Initialize maximum value
+    data_list = []  # Will hold all our data
+
+    for index, column in enumerate(['well_ts', 'eat_ts']):
         allhist = []
-        for interval in intervs:
-            if interval[1] - interval[0] >= 1:  # ignore intervals smaller than 1 second
-                # bin the spikes in the interval
-                hist = np.histogram(neur, bins=np.arange(interval[0] + start, interval[1],
-                                                         binsize))[0]
-                if len(hist) > int((end - start) / binsize):
-                    # if the interval is larger than the graph
-                    hist = hist[0:int((end - start) / binsize)]
-                while len(hist) < int((end - start) / binsize):
-                    # if the interval is too short then extend it with nans
-                    hist = np.append(hist, np.nan)
-                allhist.append(hist)
-        # Get the data container ready for all the histogram data and insert the data
-        container = np.empty((len(allhist), int((end - start) / binsize)))
+        all_data = np.empty((0, int(largest_size_of_interval / binsize)))  # Initialized to empty array
+
+        for idx, row in df.iterrows():
+            # bin the spikes in the interval,
+            ts = row[column]  # timestamps
+
+            # Ensure ts is not empty
+            hist = np.histogram(ts, bins=np.arange(min(ts), max(ts), binsize))[0]
+            hist = gaussian_filter(hist, sigma)
+            if len(hist) > largest_size_of_interval:
+                # if the interval is larger than the graph
+                hist = hist[:int(largest_size_of_interval / binsize)]
+            while len(hist) < int(largest_size_of_interval / binsize):
+                # if the interval is too short then extend it with nans
+                hist = np.append(hist, np.nan)
+            allhist.append(hist)
+
+        container = np.empty((len(allhist), int(largest_size_of_interval / binsize)))
         container[:] = np.nan
         for i in range(len(allhist)):
             container[i, :] = allhist[i]
         all_data = np.concatenate((all_data, container), 0)
-        test = np.empty((padding, 70))  # add some empty lines for visualization
+        test = np.empty((padding, int(largest_size_of_interval / binsize)))  # add some empty lines for visualization
         test[:] = np.nan
         all_data = np.concatenate((all_data, test), 0)
-        lengths.append(all_data.shape[0] + padding)  # store lengths for adding varnames
+        data_list.append(all_data)
 
-    # variable name positions
-    varpos = [.5 * (lengths[i] + lengths[i + 1]) for i in range(len(lengths) - 1)]
+        # Update vmin and vmax
+        vmin = min(vmin, np.nanmin(all_data))
+        vmax = max(vmax, np.nanmax(all_data))
 
-    # generate plot
-    plt.figure()
-    plot = sb.heatmap(all_data, cmap='jet', robust=True, cbar_kws={'label': 'spikes/bin'})
-    plot.axes.get_yaxis().set_visible(False)
-    plot.axes.get_xaxis().set_ticks(np.arange(0, all_data.shape[1] + 1, 1 / binsize))
-    plot.axes.get_xaxis().set_ticklabels(np.arange(start, end + 1, 1))
-    plt.xticks(rotation=0)
-    plt.axvline(x=-start / binsize, ymin=0, ymax=1, color='red')
-    plt.xlabel('Time (s)')
-    plt.title('File: {}\nNeuron: {}'.format(os.path.split(file)[1], neuron))
-    for i in range(len(sf_events)):
-        plt.text(0, varpos[i], sf_events[i], ha='right')
-    plt.tight_layout()
-    plt.savefig(
-        os.path.split(file)[0] + '/heatmap_{}_{}.png'.format(os.path.split(file)[1],
-                                                             neuron), dpi=300)
+    for index, data in enumerate(data_list):
+        ax = axs[index]
+        plot = sb.heatmap(data, cmap=cmap, robust=True, ax=ax, vmin=vmin, vmax=vmax, cbar=False)
+        plot.axes.get_yaxis().set_visible(False)
+        ticks = np.arange(0, data.shape[1] + 1, 1 / binsize)
+        plot.axes.get_xaxis().set_ticks(ticks)
+        plot.axes.get_xaxis().set_ticklabels(ticks * binsize)
+        plt.xlabel('Time (s)')
+
+        if index == 0:  # Flip the x-axis of the left heatmap
+            ax.invert_xaxis()
+
+    fig.subplots_adjust(wspace=0.13)  # Reduce space between subplots
+    # Transforms to figure coordinates
+    inv = fig.transFigure.inverted()
+
+    # Place labels to the right of the first heatmap
+    for index, label in enumerate(df['event']):
+        # Transform data coordinate to figure coordinate
+        x_fig, y_fig = inv.transform(axs[0].transData.transform([largest_size_of_interval, index]))
+        plt.text(x_fig + 0.05, y_fig - 0.02, label, transform=fig.transFigure)
+
+    # Create a colorbar on the right
+    cbar_ax = fig.add_axes([0.92, 0.12, 0.02, 0.78])
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    fig.colorbar(sm, cbar_ax, label='spikes/bin')
+    plt.show()
+
+def sf_heatmap_stretch(df, binsize=0.1, padding=1, cmap='plasma', sigma=1):
+    largest_size_of_intervals = {'well_ts': get_largest_size_stretch(df, 'well_ts'), 'eat_ts': get_largest_size_stretch(df, 'eat_ts')}
+    fig, axs = plt.subplots(1, 2, figsize=(20, 10))
+    vmin = np.inf
+    vmax = -np.inf
+    data_list = []
+
+    for index, column in enumerate(['well_ts', 'eat_ts']):
+        largest_size_of_interval = largest_size_of_intervals[column]
+        allhist = []
+        all_data = np.empty((0, int(largest_size_of_interval / binsize)))
+
+        for idx, row in df.iterrows():
+            ts = row[column]
+            hist = np.histogram(ts, bins=np.arange(min(ts), max(ts), binsize))[0]
+            hist = gaussian_filter(hist, sigma)
+            if len(hist) > largest_size_of_interval:
+                hist = hist[:int(largest_size_of_interval / binsize)]
+            while len(hist) < int(largest_size_of_interval / binsize):
+                hist = np.append(hist, np.nan)
+            allhist.append(hist)
+
+        container = np.empty((len(allhist), int(largest_size_of_interval / binsize)))
+        container[:] = np.nan
+        for i in range(len(allhist)):
+            container[i, :] = allhist[i]
+        all_data = np.concatenate((all_data, container), 0)
+        test = np.empty((padding, int(largest_size_of_interval / binsize)))
+        test[:] = np.nan
+        all_data = np.concatenate((all_data, test), 0)
+        data_list.append(all_data)
+        vmin = min(vmin, np.nanmin(all_data))
+        vmax = max(vmax, np.nanmax(all_data))
+
+    for index, data in enumerate(data_list):
+        ax = axs[index]
+        plot = sb.heatmap(data, cmap=cmap, robust=True, ax=ax, vmin=vmin, vmax=vmax, cbar=False)
+        plot.axes.get_yaxis().set_visible(False)
+        ticks = np.arange(0, data.shape[1] + 1, 2 / binsize)  # plotting every other tick
+        plot.axes.get_xaxis().set_ticks(ticks)
+        plot.axes.get_xaxis().set_ticklabels(ticks * binsize)
+        plt.xlabel('Time (s)')
+        if index == 0:
+            ax.invert_xaxis()
+
+    inv = fig.transFigure.inverted()
+
+    for index, label in enumerate(df['event']):
+        x_fig, y_fig = inv.transform(axs[0].transData.transform([largest_size_of_intervals['well_ts'], index]))
+        plt.text(x_fig + 0.06, y_fig - 0.02, label, transform=fig.transFigure)
+
+    fig.subplots_adjust(wspace=0.12)
+
+    cbar_ax = fig.add_axes([0.92, 0.12, 0.02, 0.78])
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    fig.colorbar(sm, cbar_ax, label='spikes/bin')
+    plt.show()
+

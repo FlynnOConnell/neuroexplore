@@ -3,7 +3,7 @@ from pw_info import get_info
 from pw_distances import get_data
 from pathlib import Path
 import metricspace as ms
-from data_utils.io import load, save
+from data_utils.data_io import load, save
 import numpy as np
 
 qvals = np.concatenate(([0], 2 ** np.arange(-4, 9.5, 0.5)))

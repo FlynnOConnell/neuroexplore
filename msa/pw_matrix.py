@@ -1,7 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import metricspace as ms
-from data_utils.io import load, save
+from data_utils.data_io import load, save
 
 
 def get_anear(input_dists, numsamples):

@@ -8,6 +8,9 @@ from params import Params
 from functools import partial
 import fnmatch
 from data_utils.parser import PLACE_NAME_MAPPING, INCORRECT_NAME_MAPPING
+from pathlib import Path
+from data_utils.file_handling import get_nex
+from helpers.heatmap import sf_heatmap
 
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -29,17 +32,48 @@ def get_spike_times_within_interval(timestamps, start, end):
 
 
 class Signals:
-    def __init__(self, nexdata: dict, filename: str, opto=False, ):
+    def __init__(self, nexdata: dict, filename: str, ):
         self.__nex = nexdata
         self.filename = filename
-        self.opto = opto
         self.params = Params()
         self.neurons: dict = {}
         self.intervals = {}
         self.__populate()
 
         self.event_df = self.get_event_df()
-        self.neuron_df = self.build_neuron_df()
+        self.stats_df = self.build_stats_df()
+        self.test_df = self.get_test_df()
+
+    def get_test_df(self):
+        df = self.event_df.copy()
+        ev_dict = {}
+
+        for neuron in self.neurons.keys():
+            result_df = pd.DataFrame(
+                columns=['event', 'well_ts', 'eat_ts'])
+
+            for i in range(len(df) - 1):
+                current_row = df.iloc[i]
+                next_row = df.iloc[i + 1]
+
+                if current_row['event'].startswith('well_') and next_row['event'].startswith('eat_'):
+                    current_event = current_row['event'].split('_')[1]
+                    next_event = next_row['event'].split('_')[1]
+
+                    if current_event == next_event:
+                        well_ts = get_spike_times_within_interval(
+                            self.neurons[neuron], current_row['start_time'], current_row['end_time'])
+                        eat_ts = get_spike_times_within_interval(
+                            self.neurons[neuron], next_row['start_time'], next_row['end_time'])
+
+                        result_df = result_df.append({
+                            'event': current_event,
+                            'well_ts': well_ts,
+                            'eat_ts': eat_ts
+                        }, ignore_index=True)
+
+            ev_dict[neuron] = result_df
+        return ev_dict
 
     def __repr__(self) -> str:
         return f'{self.filename} - {self.num_neurons} neurons'
@@ -47,18 +81,6 @@ class Signals:
     @property
     def num_neurons(self):
         return len(self.neurons.keys())
-
-    @property
-    def means(self):
-        return self.neuron_df.pivot(index='neuron', columns='event', values='mean').reset_index()
-
-    @property
-    def sems(self):
-        return self.neuron_df.pivot(index='neuron', columns='event', values='sem').reset_index()
-
-    @property
-    def stds(self):
-        return self.neuron_df.pivot(index='neuron', columns='event', values='std').reset_index()
 
     def __populate(self):
         self.neurons = {}
@@ -73,8 +95,6 @@ class Signals:
                                                                                'start', 'Interbout_int',
                                                                                'nolaser_prewell', 'laser_prewell']
         }
-        if self.opto:
-            self.map_keys()
 
     def get_well_loc(self):
         # Use os.path.splitext to split the extension from the rest of the file name
@@ -82,24 +102,12 @@ class Signals:
         parts = base_name.split('_')
         return parts[-1]
 
-    def map_keys(self):
-        key_mapping = {
-            'laserwell': 'laser_well',
-            'laserzone_prewell': 'laser_prewell',
-            'nolaserwell': 'nolaser_well',
-            'nolaserzone_prewell': 'nolaser_prewell'
-        }
-        self.intervals = {k.rstrip('0_2') if k.endswith('0_2') else k: v for k, v in self.intervals.items() if
-                          not k.endswith('-2')}
-        self.intervals = {key_mapping.get(key, key): value for key, value in self.intervals.items()}
-
     def get_spontaneous_times(self, sort, inner_gap, pad=10):
         return self.get_spont_intervs(sort, inner_gap, pad)
 
-    def build_neuron_df(self):
+    def build_stats_df(self):
         results = []
         for neuron, timestamps in self.neurons.items():
-            # Loop through each row in the events_df
             for _, row in self.event_df.iterrows():
                 spike_times_within_interval = get_spike_times_within_interval(
                     timestamps, row['start_time'], row['end_time'])
@@ -147,7 +155,7 @@ class Signals:
         new_event = new_prefix + new_ev
         return new_event
 
-    def parse_dataframe(self, df):
+    def parse_dataframe(self, input_df):
 
         # Check if the filename is in the mapping of files with food well locations.
         if self.filename in PLACE_NAME_MAPPING:
@@ -155,11 +163,11 @@ class Signals:
             row_name_map = PLACE_NAME_MAPPING[self.filename]
 
             # Create a new event column based on the current one
-            df['new_event'] = df['event'].apply(
+            input_df['new_event'] = input_df['event'].apply(
                 lambda event: self.transform_event(event, row_name_map))
-            df = df.drop(columns=['event'])
-            df = df.rename(columns={'new_event': 'event'})
-        return df
+            input_df = input_df.drop(columns=['event'])
+            input_df = input_df.rename(columns={'new_event': 'event'})
+        return input_df
 
     def get_event_df(self):
         intervals_list = []
@@ -168,10 +176,10 @@ class Signals:
                 intervals_list.append(
                     {'event': event, 'start_time': start, 'end_time': end})
         intervals_df = pd.DataFrame(intervals_list)
-        intervals_df = intervals_df[(intervals_df['end_time'] - intervals_df['start_time']) >= 1]
         intervals_df = self.parse_dataframe(intervals_df)
         intervals_df = intervals_df[~intervals_df['event'].apply(is_bad_event)]
         intervals_df['event'] = intervals_df['event'].map(INCORRECT_NAME_MAPPING).fillna(intervals_df['event'])
+        intervals_df.sort_values(by='start_time', inplace=True)
         return intervals_df
 
     def get_spont_intervs(self, sort=True, spont_gap=16, pre_event_gap=3, ts=False):
@@ -235,9 +243,13 @@ class Signals:
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-    from data_utils.file_handling import get_nex
     data_dir = Path.home() / 'data' / 'sf' / 'SFN07_2018-05-04_SF.nex'
     nex_file = get_nex(data_dir)
     data = Signals(nex_file, data_dir.stem)
-    x = 5
+    test_df = data.test_df
+    for neuron in test_df:
+        sf_heatmap(test_df[neuron])
+
+    # Plotting two side-by-side heatmaps
+    # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    # left heatmap is
