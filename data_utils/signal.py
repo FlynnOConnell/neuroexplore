@@ -8,9 +8,6 @@ from params import Params
 from functools import partial
 import fnmatch
 from data_utils.parser import PLACE_NAME_MAPPING, INCORRECT_NAME_MAPPING
-from pathlib import Path
-from data_utils.file_handling import get_nex
-from helpers.heatmap import sf_heatmap
 
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -43,6 +40,7 @@ class Signals:
         self.event_df = self.get_event_df()
         self.stats_df = self.build_stats_df()
         self.test_df = self.get_test_df()
+        self.spont = {neuron: self.get_spont_for_heatmap(neuron, 0.1) for neuron in self.neurons.keys()}
 
     def get_test_df(self):
         df = self.event_df.copy()
@@ -111,7 +109,10 @@ class Signals:
             for _, row in self.event_df.iterrows():
                 spike_times_within_interval = get_spike_times_within_interval(
                     timestamps, row['start_time'], row['end_time'])
+                if row['end_time'] - row['start_time'] == 0:
+                    continue
                 spike_rate = len(spike_times_within_interval) / (row['end_time'] - row['start_time'])
+
                 interval_duration = row['end_time'] - row['start_time']
                 event_result = {
                     'neuron': neuron,
@@ -191,7 +192,6 @@ class Signals:
 
         df = df.sort_values(by='start_time')
 
-        # Loop through dataframe rows
         for i in range(1, df.shape[0]):
             prev_event = df.iloc[i - 1]
             curr_event = df.iloc[i]
@@ -208,9 +208,20 @@ class Signals:
         # Create a dataframe from the list
         return pd.DataFrame(spont_list)
 
-    def get_spont_stamps(self, spont_intervs):
+    def get_spont_for_heatmap(self, neuron, binsize):
+        timestamps = self.neurons[neuron]
+        spont_intervs = self.get_spont_intervs(self.event_df)
+        spont_ts = []
+        for _, row in spont_intervs.iterrows():
+            spike_times_within_interval = get_spike_times_within_interval(
+                timestamps, row['start_time'], row['end_time'])
+            spont_ts.append(spike_times_within_interval)
+        return spont_ts
+
+    def get_spont_stamps(self):
         # Create an empty DataFrame to store results
         result_df = pd.DataFrame(columns=['neuron', 'mean_spike_rate', 'std_spike_rate', 'sem_spike_rate'])
+        spont_spike_rates = []
 
         for neuron in self.neurons:
             timestamps = self.neurons[neuron]
@@ -225,31 +236,6 @@ class Signals:
                     num_bins += 1  # Round up if remaining interval is at least half the bin width
                 spikes_per_bin, _ = np.histogram(spike_times_within_interval, bins=num_bins)
                 spike_rates_per_bin = spikes_per_bin / bin_width  # Convert to rates
-                spont_spike_rates.extend(spike_rates_per_bin)
+                spont_spike_rates.append(spike_rates_per_bin)
 
-            # Calculate mean, standard deviation and standard error of the mean of spontaneous spike rates for
-            # current neuron
-            mean_spike_rate = np.mean(spont_spike_rates)
-            std_spike_rate = np.std(spont_spike_rates)
-            sem_spike_rate = std_spike_rate / np.sqrt(len(spont_spike_rates))
-
-            new_row = pd.DataFrame({'neuron': [neuron],
-                                    'mean_spike_rate': [mean_spike_rate],
-                                    'std_spike_rate': [std_spike_rate],
-                                    'sem_spike_rate': [sem_spike_rate]})
-            # Add the results to the dataframe
-            result_df = pd.concat([result_df, new_row], ignore_index=True)
-        return result_df
-
-
-if __name__ == "__main__":
-    data_dir = Path.home() / 'data' / 'sf' / 'SFN07_2018-05-04_SF.nex'
-    nex_file = get_nex(data_dir)
-    data = Signals(nex_file, data_dir.stem)
-    test_df = data.test_df
-    for neuron in test_df:
-        sf_heatmap(test_df[neuron])
-
-    # Plotting two side-by-side heatmaps
-    # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    # left heatmap is
+        return spont_spike_rates
