@@ -5,11 +5,14 @@ from pathlib import Path
 import metricspace as ms
 from data_utils.data_io import load, save
 import numpy as np
-
+print(Path.home())
 qvals = np.concatenate(([0], 2 ** np.arange(-4, 9.5, 0.5)))
 
 if "__main__" == __name__:
-    data = load("/home/flynn/data/res/distances.pkl")
+    # data = load("/home/flynn/data/res/distances.pkl")
+    home = Path.home()
+
+    data = load(home / "Dropbox" / "Lab" / "SF" / "data" / "save.pkl")
     tvals = [0.5, 1, 1.5, 2]
     anear = {t: {filename: {} for filename, _ in data[t].items()} for t in tvals}
     errors = []
